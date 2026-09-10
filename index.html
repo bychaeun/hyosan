@@ -20,7 +20,7 @@
 </main></div>
 <dialog id="modal"><div id="modalContent"></div></dialog>
 <script>
-const CONFIG={API_URL:'',SYNC_MS:15000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:30};
+const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbxej7lsYO0iDTFljeqCYIQG2Gf4f5uFlN2QT7jUxDMNq4qvfjl_uu2GvXGtm0AAgQMk/exec',SYNC_MS:15000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:30};
 let db={patterns:[],lpm:[],emboss:[],categories:[],config:{}},state={patternCat:'ALL',lpmCat:'ALL',pPage:1,lPage:1,selectedHex:'#C7A97B'};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],split=v=>String(v||'').split(',').map(x=>x.trim()).filter(Boolean),safeImg=u=>esc(/^https?:\/\//i.test(String(u))?u:'https://placehold.co/800x600/e7e2d9/555?text=No+Image');
 function setStatus(t,kind=''){const e=$('#syncStatus');e.textContent=t;e.className='status '+kind}
