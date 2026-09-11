@@ -123,7 +123,7 @@ $$('.nav button').forEach(b=>b.onclick=()=>{$$('.nav button').forEach(x=>x.class
 // This PIN is a presentation gate only, not server-side authentication.
 const pinInput=$('#accessPin');
 pinInput.oninput=()=>{pinInput.value=pinInput.value.replace(/[^0-9]/g,'').slice(0,4);$('#pinMessage').textContent=''};
-$('[data-digit]').forEach(button=>button.onclick=()=>{pinInput.value=(pinInput.value+button.dataset.digit).slice(0,4);$('#pinMessage').textContent=''});
+$$('[data-digit]').forEach(button=>button.onclick=()=>{pinInput.value=(pinInput.value+button.dataset.digit).slice(0,4);$('#pinMessage').textContent=''});
 $('#pinClear').onclick=()=>{pinInput.value='';$('#pinMessage').textContent=''};
 $('#pinBack').onclick=()=>{pinInput.value=pinInput.value.slice(0,-1);$('#pinMessage').textContent=''};
 $('#accessForm').onsubmit=e=>{
