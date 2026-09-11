@@ -50,7 +50,7 @@
 <script>
 const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbz2_7sYLn86R2WomTWsgeydGw9vy99f3EuF7RGVnt-wE_Y1yH_hUtjtgAwEFezXkkAu/exec',SYNC_MS:15000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:20};
 let db={patterns:[],lpm:[],emboss:[],categories:[],config:{}},state={patternCat:'ALL',lpmCat:'ALL',pPage:1,lPage:1,selectedHex:'#C7A97B'};
-const $=s=>document.querySelector(s),$=s=>[...document.querySelectorAll(s)],split=v=>String(v||'').split(',').map(x=>x.trim()).filter(Boolean);
+const $=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)],split=v=>String(v||'').split(',').map(x=>x.trim()).filter(Boolean);
 function imageUrl(u){
  const raw=String(u||'').trim(),fallback='https://placehold.co/800x600/e7e2d9/555?text=No+Image';
  if(!/^https?:\/\//i.test(raw))return fallback;
@@ -131,7 +131,7 @@ async function printCatalog(){
 window.addEventListener('beforeprint',buildPrintCatalog);
 
 function renderAll(){renderPatterns();renderLpm();renderEmboss();drawWheel();$('#swatch').style.background=state.selectedHex;$('#hex').textContent=state.selectedHex;renderColor()}
-$$('.nav button').forEach(b=>b.onclick=()=>{$$('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');$$('.page').forEach(x=>x.classList.remove('active'));$('#'+b.dataset.page).classList.add('active');$('#pageTitle').textContent=b.textContent});$('#search').oninput=()=>{state.pPage=1;state.lPage=1;renderPatterns();renderLpm();renderEmboss()};$('#reload').onclick=syncData;$('#wheel').onclick=pick;['sat','light'].forEach(id=>$('#'+id).oninput=()=>{drawWheel();if(state.wheelPoint){const rgb=hslRgb(state.wheelPoint.h,+$('#sat').value*state.wheelPoint.ratio,+$('#light').value);state.selectedHex=rgbHex(rgb.r,rgb.g,rgb.b);$('#swatch').style.background=state.selectedHex;$('#hex').textContent=state.selectedHex}renderColor()});$('#modal').addEventListener('click',e=>{const r=modal.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)modal.close()});
+qa('.nav button').forEach(b=>b.onclick=()=>{qa('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');qa('.page').forEach(x=>x.classList.remove('active'));$('#'+b.dataset.page).classList.add('active');$('#pageTitle').textContent=b.textContent});$('#search').oninput=()=>{state.pPage=1;state.lPage=1;renderPatterns();renderLpm();renderEmboss()};$('#reload').onclick=syncData;$('#wheel').onclick=pick;['sat','light'].forEach(id=>$('#'+id).oninput=()=>{drawWheel();if(state.wheelPoint){const rgb=hslRgb(state.wheelPoint.h,+$('#sat').value*state.wheelPoint.ratio,+$('#light').value);state.selectedHex=rgbHex(rgb.r,rgb.g,rgb.b);$('#swatch').style.background=state.selectedHex;$('#hex').textContent=state.selectedHex}renderColor()});$('#modal').addEventListener('click',e=>{const r=modal.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)modal.close()});
 
 // This PIN is a presentation gate only, not server-side authentication.
 const pinInput=$('#accessPin');
@@ -143,7 +143,7 @@ function checkPin(){
  renderAll();syncData();setInterval(syncData,CONFIG.SYNC_MS);$('#search').focus();
 }
 pinInput.oninput=()=>{pinInput.value=pinInput.value.replace(/[^0-9]/g,'').slice(0,4);$('#pinMessage').textContent='';checkPin()};
-$$('[data-digit]').forEach(button=>button.onclick=()=>{pinInput.value=(pinInput.value+button.dataset.digit).slice(0,4);$('#pinMessage').textContent='';checkPin()});
+qa('[data-digit]').forEach(button=>button.onclick=()=>{pinInput.value=(pinInput.value+button.dataset.digit).slice(0,4);$('#pinMessage').textContent='';checkPin()});
 $('#pinClear').onclick=()=>{pinInput.value='';$('#pinMessage').textContent=''};
 $('#pinBack').onclick=()=>{pinInput.value=pinInput.value.slice(0,-1);$('#pinMessage').textContent=''};
 $('#accessForm').onsubmit=e=>{e.preventDefault();checkPin()};
