@@ -50,7 +50,20 @@
 <script>
 const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbz2_7sYLn86R2WomTWsgeydGw9vy99f3EuF7RGVnt-wE_Y1yH_hUtjtgAwEFezXkkAu/exec',SYNC_MS:15000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:20};
 let db={patterns:[],lpm:[],emboss:[],categories:[],config:{}},state={patternCat:'ALL',lpmCat:'ALL',pPage:1,lPage:1,selectedHex:'#C7A97B'};
-const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],split=v=>String(v||'').split(',').map(x=>x.trim()).filter(Boolean),safeImg=u=>esc(/^https?:\/\//i.test(String(u))?u:'https://placehold.co/800x600/e7e2d9/555?text=No+Image');
+const $=s=>document.querySelector(s),$=s=>[...document.querySelectorAll(s)],split=v=>String(v||'').split(',').map(x=>x.trim()).filter(Boolean);
+function imageUrl(u){
+ const raw=String(u||'').trim(),fallback='https://placehold.co/800x600/e7e2d9/555?text=No+Image';
+ if(!/^https?:\/\//i.test(raw))return fallback;
+ try{
+  const url=new URL(raw);
+  if(/(^|\.)drive\.google\.com$/i.test(url.hostname)){
+   const match=url.pathname.match(/^\/file\/d\/([^/]+)/),id=(match&&match[1])||url.searchParams.get('id');
+   if(id)return 'https://drive.google.com/thumbnail?id='+encodeURIComponent(id)+'&sz=w1600';
+  }
+ }catch(e){}
+ return raw;
+}
+const safeImg=u=>esc(imageUrl(u));
 function setStatus(t,kind=''){const e=$('#syncStatus');e.textContent=t;e.className='status '+kind}
 async function syncData(){if(!CONFIG.API_URL){setStatus('Apps Script URL 설정 필요','err');return}try{setStatus('Google Sheets 동기화 중…');const r=await fetch(CONFIG.API_URL+'?action=data&ts='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(12000)});if(!r.ok)throw new Error('HTTP '+r.status);const j=await r.json();if(j.ok===false||!['patterns','lpm','emboss','categories'].every(k=>Array.isArray(j[k])))throw new Error(j.error||'잘못된 데이터 응답');db=j;setStatus('최신 Google Sheets 반영 · '+new Date().toLocaleTimeString(),'ok');renderAll()}catch(e){setStatus('동기화 실패 · '+e.message,'err')}}
 function searchOK(x){const q=$('#search').value.trim().toLowerCase();return !q||JSON.stringify(x).toLowerCase().includes(q)}
