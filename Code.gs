@@ -47,7 +47,8 @@ function exportToSlides_(lpmId){
   const slide=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
   const W=pres.getPageWidth(),H=pres.getPageHeight();
   slide.insertShape(SlidesApp.ShapeType.RECTANGLE,0,0,W,H).getFill().setSolidFill('#F5F3EE');
-  if(item.ImageURL){try{slide.insertImage(item.ImageURL,0,0,W*.58,H)}catch(e){}}
+  const slideImage=firstImageUrl_(item.ImageURL||item.PreviewImageURL);
+  if(slideImage){try{slide.insertImage(slideImage,0,0,W*.58,H)}catch(e){}}
   const x=W*.62,w=W*.32;
   addText_(slide,item.ProductName||'',x,H*.12,w,40,15,true);
   addText_(slide,'품번',x,H*.27,w,18,11,true); addText_(slide,item.ProductCode||'-',x,H*.32,w,28,8,false);
@@ -60,6 +61,10 @@ function exportToSlides_(lpmId){
 
 function addText_(slide,text,x,y,w,h,size,bold){
   const box=slide.insertTextBox(String(text||''),x,y,w,h); const style=box.getText().getTextStyle(); style.setFontFamily('Noto Sans KR').setFontSize(size).setBold(!!bold).setForegroundColor('#171717'); return box;
+}
+
+function firstImageUrl_(value){
+  return String(value||'').split(/[\r\n,;|]+/).map(v=>v.trim()).find(v=>/^https?:\/\//i.test(v))||'';
 }
 
 function jsonOutput(obj){return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON)}
