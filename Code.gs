@@ -1,70 +1,154 @@
 const SPREADSHEET_ID='1RC-6ibPA86zaWOGt1rzgmQf9tLpT4OcgdI6K9XcUPTI';
-const SHEET_NAMES={patterns:'PATTERN_DESIGN',lpm:'HYOSAN_LPM',emboss:'EMBOSS_PLATE',categories:'CATEGORIES',config:'CONFIG'};
+const SHEET_NAMES={patterns:'PATTERN_DESIGN',lpm:'HYOSAN_LPM',emboss:'EMBOSS_PLATE',categories:'CATEGORIES',config:'CONFIG',users:'APP_USERS'};
+const USER_HEADERS=['Email','Name','PictureURL','Status','RequestedAt','LastLoginAt','ApprovedBy','ApprovedAt'];
 
 function doGet(e){
   try{
-    const action=(e&&e.parameter&&e.parameter.action)||'data';
-    if(action==='data') return jsonOutput(getAllData_());
+    const action=(e&&e.parameter&&e.parameter.action)||'data',cfg=getConfig_(),authRequired=isAuthRequired_(cfg);
+    if(action==='appConfig')return jsonOutput({ok:true,clientId:cfg.GOOGLE_CLIENT_ID||'',authRequired:authRequired,appName:cfg.LIBRARY_TITLE||'HYOSAN LPM Library'});
+    if(action==='health')return jsonOutput({ok:true,authRequired:authRequired});
+    if(action==='data'&&!authRequired)return jsonOutput(getAllData_());
+    if(action==='data')return jsonOutput({ok:false,error:'Google login required',code:'AUTH_REQUIRED'});
     return jsonOutput({ok:false,error:'Unknown action'});
-  }catch(err){return jsonOutput({ok:false,error:String(err)})}
+  }catch(err){return jsonOutput({ok:false,error:String(err),code:err&&err.code?err.code:'REQUEST_FAILED'})}
 }
 
 function doPost(e){
   try{
-    const body=JSON.parse((e&&e.postData&&e.postData.contents)||'{}');
-    if(body.action==='exportToSlides') return jsonOutput(exportToSlides_(body.lpmId));
+    const body=JSON.parse((e&&e.postData&&e.postData.contents)||'{}'),cfg=getConfig_(),authRequired=isAuthRequired_(cfg);
+    if(!authRequired&&body.action==='data')return jsonOutput(getAllData_());
+    if(!authRequired&&body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmId));
+    const identity=verifyGoogleToken_(body.idToken,cfg),user=touchUser_(identity,cfg);
+    if(body.action==='authStatus')return jsonOutput(userResponse_(user));
+    if(user.Status!=='ADMIN'&&user.Status!=='APPROVED')return jsonOutput(userResponse_(user));
+    if(body.action==='data')return jsonOutput(Object.assign(getAllData_(),{user:userResponse_(user).user}));
+    if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmId));
+    if(body.action==='listUsers')return jsonOutput(listUsers_(user));
+    if(body.action==='setUserStatus')return jsonOutput(setUserStatus_(user,body.email,body.status));
     return jsonOutput({ok:false,error:'Unknown action'});
-  }catch(err){return jsonOutput({ok:false,error:String(err)})}
+  }catch(err){return jsonOutput({ok:false,error:String(err),code:err&&err.code?err.code:'REQUEST_FAILED'})}
 }
 
+function getConfig_(){
+  const cache=CacheService.getScriptCache(),key='app-config-v1',cached=cache.get(key);
+  if(cached){try{return JSON.parse(cached)}catch(e){}}
+  const ss=SpreadsheetApp.openById(SPREADSHEET_ID),cfg={};
+  readSheet_(ss,SHEET_NAMES.config).forEach(r=>{if(r.KEY)cfg[r.KEY]=r.VALUE});
+  try{cache.put(key,JSON.stringify(cfg),60)}catch(e){}
+  return cfg;
+}
+
+function isAuthRequired_(cfg){return String(cfg.AUTH_REQUIRED||'').toUpperCase()==='TRUE'}
+
+function verifyGoogleToken_(idToken,cfg){
+  if(!idToken)throw appError_('Google 로그인이 필요합니다.','AUTH_REQUIRED');
+  if(!cfg.GOOGLE_CLIENT_ID)throw appError_('CONFIG 시트에 GOOGLE_CLIENT_ID를 설정해 주세요.','AUTH_NOT_CONFIGURED');
+  const digest=Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,idToken)).slice(0,36),cache=CacheService.getScriptCache(),key='google-id-'+digest,cached=cache.get(key);
+  if(cached){try{return JSON.parse(cached)}catch(e){}}
+  const response=UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token='+encodeURIComponent(idToken),{muteHttpExceptions:true});
+  if(response.getResponseCode()!==200)throw appError_('Google 로그인 정보를 확인할 수 없습니다.','INVALID_TOKEN');
+  const payload=JSON.parse(response.getContentText());
+  if(payload.aud!==cfg.GOOGLE_CLIENT_ID||String(payload.email_verified)!=='true'||!payload.email)throw appError_('허용되지 않은 Google 로그인입니다.','INVALID_TOKEN');
+  const identity={email:String(payload.email).toLowerCase(),name:payload.name||'',picture:payload.picture||''};
+  try{cache.put(key,JSON.stringify(identity),300)}catch(e){}
+  return identity;
+}
+
+function touchUser_(identity,cfg){
+  const lock=LockService.getScriptLock();lock.waitLock(10000);
+  try{
+    const ss=SpreadsheetApp.openById(SPREADSHEET_ID),sh=getUserSheet_(ss),values=sh.getDataRange().getDisplayValues(),headers=values[0],email=identity.email.toLowerCase(),now=new Date().toISOString();
+    let rowIndex=-1,row=null;
+    for(let i=1;i<values.length;i++)if(String(values[i][0]||'').toLowerCase()===email){rowIndex=i+1;row=Object.fromEntries(headers.map((h,j)=>[h,values[i][j]]));break}
+    const adminEmail=String(cfg.ADMIN_EMAIL||'').toLowerCase();
+    if(!row){
+      const status=email===adminEmail?'ADMIN':'PENDING',newRow=[email,identity.name,identity.picture,status,now,now,status==='ADMIN'?email:'',status==='ADMIN'?now:''];
+      sh.appendRow(newRow);row=Object.fromEntries(USER_HEADERS.map((h,i)=>[h,newRow[i]]));
+    }else{
+      row.Name=identity.name||row.Name;row.PictureURL=identity.picture||row.PictureURL;row.LastLoginAt=now;
+      if(email===adminEmail)row.Status='ADMIN';
+      sh.getRange(rowIndex,2,1,5).setValues([[row.Name,row.PictureURL,row.Status,row.RequestedAt||now,row.LastLoginAt]]);
+    }
+    return row;
+  }finally{lock.releaseLock()}
+}
+
+function getUserSheet_(ss){
+  let sh=ss.getSheetByName(SHEET_NAMES.users);
+  if(!sh){sh=ss.insertSheet(SHEET_NAMES.users);sh.getRange(1,1,1,USER_HEADERS.length).setValues([USER_HEADERS]);sh.setFrozenRows(1)}
+  return sh;
+}
+
+function userResponse_(user){
+  const status=user.Status||'PENDING';
+  return {ok:status==='ADMIN'||status==='APPROVED',status:status,user:{email:user.Email,name:user.Name,picture:user.PictureURL,isAdmin:status==='ADMIN'},message:status==='PENDING'?'관리자 승인을 기다리고 있습니다.':status==='REVOKED'?'관리자가 사용 권한을 중지했습니다.':''};
+}
+
+function listUsers_(admin){
+  assertAdmin_(admin);const rows=readSheet_(SpreadsheetApp.openById(SPREADSHEET_ID),SHEET_NAMES.users);
+  return {ok:true,users:rows.map(r=>({email:r.Email,name:r.Name,picture:r.PictureURL,status:r.Status,requestedAt:r.RequestedAt,lastLoginAt:r.LastLoginAt,approvedBy:r.ApprovedBy,approvedAt:r.ApprovedAt}))};
+}
+
+function setUserStatus_(admin,email,status){
+  assertAdmin_(admin);email=String(email||'').trim().toLowerCase();status=String(status||'').toUpperCase();
+  if(!email||!['APPROVED','REVOKED'].includes(status))throw appError_('사용자 또는 상태 값이 올바르지 않습니다.','INVALID_USER_UPDATE');
+  if(email===String(admin.Email||'').toLowerCase())throw appError_('관리자 본인의 권한은 변경할 수 없습니다.','ADMIN_PROTECTED');
+  const ss=SpreadsheetApp.openById(SPREADSHEET_ID),sh=getUserSheet_(ss),values=sh.getDataRange().getDisplayValues(),now=new Date().toISOString();
+  for(let i=1;i<values.length;i++)if(String(values[i][0]||'').toLowerCase()===email){sh.getRange(i+1,4).setValue(status);sh.getRange(i+1,7,1,2).setValues([[admin.Email,now]]);return {ok:true,email:email,status:status}}
+  throw appError_('사용자를 찾을 수 없습니다.','USER_NOT_FOUND');
+}
+
+function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관리자 권한이 필요합니다.','ADMIN_REQUIRED')}
+function appError_(message,code){const err=new Error(message);err.code=code;return err}
+
 function getAllData_(){
+  const cache=CacheService.getScriptCache(),cacheKey='library-data-v1',cached=cache.get(cacheKey);
+  if(cached){try{return JSON.parse(cached)}catch(e){}}
   const ss=SpreadsheetApp.openById(SPREADSHEET_ID);
   const out={patterns:readSheet_(ss,SHEET_NAMES.patterns),lpm:readSheet_(ss,SHEET_NAMES.lpm),emboss:readSheet_(ss,SHEET_NAMES.emboss),categories:readSheet_(ss,SHEET_NAMES.categories),config:{}};
-  readSheet_(ss,SHEET_NAMES.config).forEach(r=>{if(r.KEY)out.config[r.KEY]=r.VALUE});
+  const publicConfig=['LIBRARY_TITLE','SYNC_INTERVAL_SECONDS','COLOR_TOLERANCE_PERCENT','VERSION'];
+  readSheet_(ss,SHEET_NAMES.config).forEach(r=>{if(publicConfig.includes(r.KEY))out.config[r.KEY]=r.VALUE});
   readSheet_(ss,'RELATIONS').forEach(r=>{
     const p=out.patterns.find(x=>x.ID===r.Pattern_ID),l=out.lpm.find(x=>x.LPM_ID===r.LPM_ID);
     const add=(o,key,id)=>{if(o&&id)o[key]=Array.from(new Set(String(o[key]||'').split(',').map(x=>x.trim()).filter(Boolean).concat(id))).join(',')};
     add(p,'RelatedLPM_IDs',r.LPM_ID);add(p,'RecommendedEmbossPlate_IDs',r.EmbossPlate_ID);
     add(l,'RelatedPattern_IDs',r.Pattern_ID);add(l,'EmbossPlate_IDs',r.EmbossPlate_ID);
   });
+  try{cache.put(cacheKey,JSON.stringify(out),45)}catch(e){}
   return out;
 }
 
 function readSheet_(ss,name){
-  const sh=ss.getSheetByName(name); if(!sh) return [];
-  const values=sh.getDataRange().getDisplayValues(); if(values.length<2) return [];
+  const sh=ss.getSheetByName(name);if(!sh)return [];
+  const values=sh.getDataRange().getDisplayValues();if(values.length<2)return [];
   const headers=values[0];
   return values.slice(1).filter(r=>r.some(v=>v!=='')).map(r=>Object.fromEntries(headers.map((h,i)=>[h,r[i]])));
 }
 
 function exportToSlides_(lpmId){
-  if(!lpmId) throw new Error('lpmId is required');
-  const ss=SpreadsheetApp.openById(SPREADSHEET_ID);
-  const rows=readSheet_(ss,SHEET_NAMES.lpm); const item=rows.find(r=>r.LPM_ID===lpmId); if(!item) throw new Error('LPM not found: '+lpmId);
-  const cfg={}; readSheet_(ss,SHEET_NAMES.config).forEach(r=>{if(r.KEY)cfg[r.KEY]=r.VALUE});
+  if(!lpmId)throw new Error('lpmId is required');
+  const ss=SpreadsheetApp.openById(SPREADSHEET_ID),rows=readSheet_(ss,SHEET_NAMES.lpm),item=rows.find(r=>r.LPM_ID===lpmId);if(!item)throw new Error('LPM not found: '+lpmId);
+  const cfg={};readSheet_(ss,SHEET_NAMES.config).forEach(r=>{if(r.KEY)cfg[r.KEY]=r.VALUE});
   let pres;
   if(cfg.SLIDES_DESTINATION_ID){pres=SlidesApp.openById(cfg.SLIDES_DESTINATION_ID)}else{pres=SlidesApp.create('HYOSAN LPM Export - '+item.ProductName)}
-  const slide=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
-  const W=pres.getPageWidth(),H=pres.getPageHeight();
+  const slide=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK),W=pres.getPageWidth(),H=pres.getPageHeight();
   slide.insertShape(SlidesApp.ShapeType.RECTANGLE,0,0,W,H).getFill().setSolidFill('#F5F3EE');
   const slideImage=firstImageUrl_(item.ImageURL||item.PreviewImageURL);
   if(slideImage){try{slide.insertImage(slideImage,0,0,W*.58,H)}catch(e){}}
   const x=W*.62,w=W*.32;
   addText_(slide,item.ProductName||'',x,H*.12,w,40,15,true);
-  addText_(slide,'품번',x,H*.27,w,18,11,true); addText_(slide,item.ProductCode||'-',x,H*.32,w,28,8,false);
-  addText_(slide,'분류',x,H*.41,w,18,11,true); addText_(slide,(item.Category||'')+' / '+(item.SubCategory||''),x,H*.46,w,28,8,false);
-  addText_(slide,'특징',x,H*.55,w,18,11,true); addText_(slide,item.Characteristics||'-',x,H*.60,w,45,8,false);
-  addText_(slide,'형태 / 용도',x,H*.72,w,18,11,true); addText_(slide,(item.PatternForm||'-')+'\n'+(item.Applications||'-'),x,H*.77,w,55,8,false);
-  if(pres.getSlides().length>1 && !cfg.SLIDES_DESTINATION_ID){pres.getSlides()[0].remove()}
+  addText_(slide,'품번',x,H*.27,w,18,11,true);addText_(slide,item.ProductCode||'-',x,H*.32,w,28,8,false);
+  addText_(slide,'분류',x,H*.41,w,18,11,true);addText_(slide,(item.Category||'')+' / '+(item.SubCategory||''),x,H*.46,w,28,8,false);
+  addText_(slide,'특징',x,H*.55,w,18,11,true);addText_(slide,item.Characteristics||'-',x,H*.60,w,45,8,false);
+  addText_(slide,'형태 / 용도',x,H*.72,w,18,11,true);addText_(slide,(item.PatternForm||'-')+'\n'+(item.Applications||'-'),x,H*.77,w,55,8,false);
+  if(pres.getSlides().length>1&&!cfg.SLIDES_DESTINATION_ID)pres.getSlides()[0].remove();
   return {ok:true,presentationId:pres.getId(),url:pres.getUrl()};
 }
 
 function addText_(slide,text,x,y,w,h,size,bold){
-  const box=slide.insertTextBox(String(text||''),x,y,w,h); const style=box.getText().getTextStyle(); style.setFontFamily('Noto Sans KR').setFontSize(size).setBold(!!bold).setForegroundColor('#171717'); return box;
+  const box=slide.insertTextBox(String(text||''),x,y,w,h),style=box.getText().getTextStyle();style.setFontFamily('Noto Sans KR').setFontSize(size).setBold(!!bold).setForegroundColor('#171717');return box;
 }
 
-function firstImageUrl_(value){
-  return String(value||'').split(/[\r\n,;|]+/).map(v=>v.trim()).find(v=>/^https?:\/\//i.test(v))||'';
-}
-
+function firstImageUrl_(value){return String(value||'').split(/[\r\n,;|]+/).map(v=>v.trim()).find(v=>/^https?:\/\//i.test(v))||''}
 function jsonOutput(obj){return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON)}
+
