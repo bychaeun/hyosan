@@ -27,7 +27,7 @@ function doPost(e){
     if(body.action==='sessionStatus')return jsonOutput(userResponse_(user));
     if(user.Status!=='ADMIN'&&user.Status!=='APPROVED')return jsonOutput(userResponse_(user));
     if(body.action==='data')return jsonOutput(Object.assign(getAllData_(),{user:userResponse_(user).user}));
-    if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmId));
+    if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmId,user.Email));
     if(body.action==='listUsers')return jsonOutput(listUsers_(user));
     if(body.action==='setUserStatus')return jsonOutput(setUserStatus_(user,body.email,body.status));
     return jsonOutput({ok:false,error:'Unknown action'});
@@ -152,7 +152,7 @@ function readSheet_(ss,name){
   return values.slice(1).filter(r=>r.some(v=>v!=='')).map(r=>Object.fromEntries(headers.map((h,i)=>[h,r[i]])));
 }
 
-function exportToSlides_(lpmId){
+function exportToSlides_(lpmId,requesterEmail){
   if(!lpmId)throw new Error('lpmId is required');
   const ss=SpreadsheetApp.openById(SPREADSHEET_ID),rows=readSheet_(ss,SHEET_NAMES.lpm),item=rows.find(r=>r.LPM_ID===lpmId);if(!item)throw new Error('LPM not found: '+lpmId);
   const cfg={};readSheet_(ss,SHEET_NAMES.config).forEach(r=>{if(r.KEY)cfg[r.KEY]=r.VALUE});
@@ -169,6 +169,7 @@ function exportToSlides_(lpmId){
   addText_(slide,'특징',x,H*.55,w,18,11,true);addText_(slide,item.Characteristics||'-',x,H*.60,w,45,8,false);
   addText_(slide,'형태 / 용도',x,H*.72,w,18,11,true);addText_(slide,(item.PatternForm||'-')+'\n'+(item.Applications||'-'),x,H*.77,w,55,8,false);
   if(pres.getSlides().length>1&&!cfg.SLIDES_DESTINATION_ID)pres.getSlides()[0].remove();
+  if(requesterEmail)DriveApp.getFileById(pres.getId()).addEditor(requesterEmail);
   return {ok:true,presentationId:pres.getId(),url:pres.getUrl()};
 }
 
