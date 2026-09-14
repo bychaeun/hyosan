@@ -37,14 +37,12 @@
 </head>
 <body class="access-locked">
 <section id="accessGate" class="access-gate" aria-labelledby="accessTitle">
-<form id="accessForm" class="access-panel">
+<div id="accessForm" class="access-panel google-gate">
 <img class="access-logo" src="assets/hyosan-lpl-logo-full.svg" alt="HYOSAN LPL">
-<h1 id="accessTitle">비밀번호 네 자리를 입력해주세요.</h1>
-<input id="accessPin" placeholder="••••" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" aria-label="관리자 비밀번호" aria-describedby="pinMessage">
-<p id="pinMessage" class="pin-message" role="status"></p>
-<div class="pin-pad"><button type="button" data-digit="1">1</button><button type="button" data-digit="2">2</button><button type="button" data-digit="3">3</button><button type="button" data-digit="4">4</button><button type="button" data-digit="5">5</button><button type="button" data-digit="6">6</button><button type="button" data-digit="7">7</button><button type="button" data-digit="8">8</button><button type="button" data-digit="9">9</button><button type="button" class="pin-edit" id="pinClear">전체 지움</button><button type="button" data-digit="0">0</button><button type="button" class="pin-edit" id="pinBack" aria-label="한 자리 지우기">⌫</button></div>
-
-</form></section>
+<h1 id="accessTitle">HYOSAN LPM Library</h1>
+<p class="login-help">Google 로그인 정보를 불러오고 있습니다…</p>
+<p id="loginStatus" class="login-status" role="status"></p>
+</div></section>
 <div class="app"><aside><div class="brand">HYOSAN<br>LPM Library<small>LIVE · Google Sheets Sync</small></div><div class="nav"><button class="active" data-page="patterns">패턴 디자인</button><button data-page="lpm">효산 LPM 디자인</button><button data-page="emboss">경면판</button><button data-page="colorist">컬러리스트</button></div></aside>
 <main><div class="top"><div><h1 id="pageTitle">패턴 디자인</h1><div id="syncStatus" class="status">데이터 연결 대기</div></div><div class="tools"><input id="search" placeholder="이름 / 분류 / 품번 검색"><button class="btn ghost" id="reload">지금 동기화</button><button class="btn ghost" onclick="printCatalog()">PDF 저장</button><button class="btn ghost" id="userAdminButton" hidden>사용자 관리</button><button class="btn ghost" id="logoutButton" hidden>로그아웃</button></div></div>
 <section id="patterns" class="page active"><div class="tabs" id="patternTabs"></div><div class="grid" id="patternGrid"></div><div class="pager" id="patternPager"></div></section>
@@ -179,15 +177,10 @@ function showGoogleGate(){
  const form=$('#accessForm');form.className='access-panel google-gate';form.innerHTML='<img class="access-logo" src="assets/hyosan-lpl-logo-full.svg" alt="HYOSAN LPL"><h1 id="accessTitle">HYOSAN LPM Library</h1><p class="login-help">회사에서 사용할 Google 계정으로 로그인해 주세요.<br>최초 로그인 후 관리자의 승인이 필요합니다.</p><div id="googleButton" class="google-button"></div><p id="loginStatus" class="login-status" role="status"></p>';
  const init=()=>{if(!(window.google&&google.accounts&&google.accounts.id)){setTimeout(init,150);return}google.accounts.id.initialize({client_id:auth.clientId,callback:handleGoogleCredential,auto_select:false});google.accounts.id.renderButton($('#googleButton'),{theme:'outline',size:'large',shape:'pill',text:'signin_with',locale:'ko',width:280})};init();
 }
-function setupPinGate(){
- const pinInput=$('#accessPin');let entered=false;if(!pinInput)return;
- function checkPin(){if(entered||pinInput.value.length!==4)return;if(pinInput.value!=='8913'){$('#pinMessage').textContent='비밀번호가 틀렸습니다. 다시 입력해주세요.';pinInput.value='';pinInput.focus();return}entered=true;pinInput.value='';startApp()}
- pinInput.oninput=()=>{pinInput.value=pinInput.value.replace(/[^0-9]/g,'').slice(0,4);$('#pinMessage').textContent='';checkPin()};qa('[data-digit]').forEach(button=>button.onclick=()=>{pinInput.value=(pinInput.value+button.dataset.digit).slice(0,4);$('#pinMessage').textContent='';checkPin()});$('#pinClear').onclick=()=>{pinInput.value='';$('#pinMessage').textContent=''};$('#pinBack').onclick=()=>{pinInput.value=pinInput.value.slice(0,-1);$('#pinMessage').textContent=''};$('#accessForm').onsubmit=e=>{e.preventDefault();checkPin()};pinInput.focus();
-}
 async function bootstrapAccess(){
  try{const r=await fetch(CONFIG.API_URL+'?action=appConfig&ts='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(10000)}),j=await r.json();auth.required=j.authRequired===true;auth.clientId=String(j.clientId||'');if(auth.required&&auth.clientId){if(auth.sessionToken){try{const session=await apiPost('sessionStatus');if(session.status==='ADMIN'||session.status==='APPROVED'){startApp(session.user);return}}catch(e){localStorage.removeItem('hyosan-session');auth.sessionToken=''}}showGoogleGate();return}}
- catch(e){}
- setupPinGate();
+ catch(e){loginStatus('로그인 서버에 연결하지 못했습니다. 잠시 후 새로고침해 주세요.',true);return}
+ loginStatus('Google 로그인 설정을 확인할 수 없습니다. 관리자에게 문의해 주세요.',true);
 }
 async function showUserAdmin(){
  const dialog=$('#userDialog'),root=$('#userDialogContent');root.innerHTML='<div class="user-admin-head"><h1>사용자 관리</h1><button class="close" onclick="userDialog.close()">×</button></div><p class="muted">사용자 목록을 불러오는 중…</p>';if(!dialog.open)dialog.showModal();
