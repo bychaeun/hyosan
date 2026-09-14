@@ -202,12 +202,14 @@ function renderUserRows(users){
 async function changeUserStatus(encodedEmail,status){if(!(auth.user&&auth.user.isAdmin))return;try{await apiPost('setUserStatus',{email:decodeURIComponent(encodedEmail),status});await showUserAdmin()}catch(e){alert(e.message)}}
 function logout(){if(window.google&&google.accounts)google.accounts.id.disableAutoSelect();auth.idToken='';auth.sessionToken='';localStorage.removeItem('hyosan-session');location.reload()}
 function isInstalled(){return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}
+function showInstallHelp(message){$('#installHelp').innerHTML=message;if(!installDialog.open)installDialog.showModal()}
 async function installApp(){
- if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;if(isInstalled())$('#installButton').hidden=true;return}
- const ios=/iPad|iPhone|iPod/.test(navigator.userAgent);$('#installHelp').innerHTML=ios?'Safari 하단의 <b>공유</b> 버튼을 누른 뒤 <b>홈 화면에 추가</b>를 선택해 주세요.':'Chrome 또는 Edge의 주소창 오른쪽 <b>설치 아이콘</b>을 누르세요. Android에서는 브라우저 메뉴의 <b>앱 설치</b> 또는 <b>홈 화면에 추가</b>를 선택하면 됩니다.';if(!installDialog.open)installDialog.showModal();
+ if(isInstalled()){showInstallHelp('이 기기에는 이미 앱으로 설치되어 있습니다. 바탕 화면이나 앱 목록에서 <b>효산 LPL</b>을 실행해 주세요.');return}
+ if(installPrompt){installPrompt.prompt();const result=await installPrompt.userChoice;installPrompt=null;if(result.outcome==='dismissed')showInstallHelp('설치가 취소되었습니다. 다시 설치하려면 <b>앱 설치</b> 버튼을 눌러 주세요.');return}
+ const ios=/iPad|iPhone|iPod/.test(navigator.userAgent);showInstallHelp(ios?'iPhone·iPad는 파일 다운로드 방식이 아니라 Safari 하단의 <b>공유</b> 버튼 → <b>홈 화면에 추가</b>를 선택해 설치합니다.':'이 브라우저에서는 자동 설치 창을 열 수 없습니다. Chrome 또는 Edge로 접속한 뒤 메뉴의 <b>앱 설치</b> 또는 <b>홈 화면에 추가</b>를 선택해 주세요.');
 }
-window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e});window.addEventListener('appinstalled',()=>{$('#installButton').hidden=true;installPrompt=null});
-$('#installButton').hidden=isInstalled();$('#installButton').onclick=installApp;$('#userAdminButton').onclick=showUserAdmin;$('#logoutButton').onclick=logout;bootstrapAccess();
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e});window.addEventListener('appinstalled',()=>{installPrompt=null});
+$('#installButton').onclick=installApp;$('#userAdminButton').onclick=showUserAdmin;$('#logoutButton').onclick=logout;bootstrapAccess();
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 </script>
 </body></html>
