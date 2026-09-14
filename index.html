@@ -56,7 +56,7 @@
 <dialog id="modal"><div id="modalContent"></div></dialog>
 <dialog id="userDialog"><div id="userDialogContent" class="user-admin"></div></dialog>
 <script>
-const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbz2_7sYLn86R2WomTWsgeydGw9vy99f3EuF7RGVnt-wE_Y1yH_hUtjtgAwEFezXkkAu/exec',SYNC_MS:60000,SYNC_TIMEOUT_MS:30000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:20};
+const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbxZP88WUP-WPuNIUH51C2V1zZ3DHQEKugDB-VcypCZ8Dg0a2PSXJ1c2tWiiw5K9Yl1t/exec',SYNC_MS:60000,SYNC_TIMEOUT_MS:30000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:20};
 let db={patterns:[],lpm:[],emboss:[],categories:[],config:{}},state={patternCat:'ALL',lpmCat:'ALL',pPage:1,lPage:1,ePage:1,selectedHex:'#C7A97B',modalImages:[],modalIndex:0,modalTitle:''},syncPromise=null,lastPayloadText='',appStarted=false,syncTimer=null;
 const auth={required:false,clientId:'',idToken:'',sessionToken:localStorage.getItem('hyosan-session')||'',user:null};
 const $=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)],split=v=>String(v||'').split(',').map(x=>x.trim()).filter(Boolean);
