@@ -1,4 +1,4 @@
-const CACHE_NAME='hyosan-lpl-v1';
+const CACHE_NAME='hyosan-lpl-v2';
 const APP_SHELL=['./','./index.html','./manifest.webmanifest','./assets/hyosan-app-icon.svg'];
 
 self.addEventListener('install',event=>{
