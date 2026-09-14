@@ -18,8 +18,13 @@ function doPost(e){
     const body=JSON.parse((e&&e.postData&&e.postData.contents)||'{}'),cfg=getConfig_(),authRequired=isAuthRequired_(cfg);
     if(!authRequired&&body.action==='data')return jsonOutput(getAllData_());
     if(!authRequired&&body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmId));
-    const identity=verifyGoogleToken_(body.idToken,cfg),user=touchUser_(identity,cfg);
-    if(body.action==='authStatus')return jsonOutput(userResponse_(user));
+    if(body.action==='authStatus'){
+      const identity=verifyGoogleToken_(body.idToken,cfg),loginUser=touchUser_(identity,cfg),loginResponse=userResponse_(loginUser);
+      if(loginResponse.ok)loginResponse.sessionToken=createSessionToken_(loginUser.Email);
+      return jsonOutput(loginResponse);
+    }
+    const user=authenticateRequest_(body,cfg);
+    if(body.action==='sessionStatus')return jsonOutput(userResponse_(user));
     if(user.Status!=='ADMIN'&&user.Status!=='APPROVED')return jsonOutput(userResponse_(user));
     if(body.action==='data')return jsonOutput(Object.assign(getAllData_(),{user:userResponse_(user).user}));
     if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmId));
@@ -39,6 +44,28 @@ function getConfig_(){
 }
 
 function isAuthRequired_(cfg){return String(cfg.AUTH_REQUIRED||'').toUpperCase()==='TRUE'}
+
+function authenticateRequest_(body,cfg){
+  if(body.sessionToken)return getUserByEmail_(verifySessionToken_(body.sessionToken));
+  return touchUser_(verifyGoogleToken_(body.idToken,cfg),cfg);
+}
+
+function createSessionToken_(email){
+  const payload=Utilities.base64EncodeWebSafe(JSON.stringify({email:String(email).toLowerCase(),exp:Date.now()+30*24*60*60*1000})).replace(/=+$/,''),signature=Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(payload,getSessionSecret_())).replace(/=+$/,'');
+  return payload+'.'+signature;
+}
+
+function verifySessionToken_(token){
+  const parts=String(token||'').split('.');if(parts.length!==2)throw appError_('로그인이 만료되었습니다.','INVALID_SESSION');
+  const expected=Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(parts[0],getSessionSecret_())).replace(/=+$/,'');if(parts[1]!==expected)throw appError_('로그인이 만료되었습니다.','INVALID_SESSION');
+  const payload=JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString());if(!payload.email||Number(payload.exp)<Date.now())throw appError_('로그인이 만료되었습니다.','INVALID_SESSION');return String(payload.email).toLowerCase();
+}
+
+function getSessionSecret_(){const props=PropertiesService.getScriptProperties();let secret=props.getProperty('SESSION_SECRET');if(!secret){secret=Utilities.getUuid()+Utilities.getUuid();props.setProperty('SESSION_SECRET',secret)}return secret}
+
+function getUserByEmail_(email){
+  const rows=readSheet_(SpreadsheetApp.openById(SPREADSHEET_ID),SHEET_NAMES.users),user=rows.find(r=>String(r.Email||'').toLowerCase()===String(email||'').toLowerCase());if(!user)throw appError_('사용자를 찾을 수 없습니다.','USER_NOT_FOUND');return user;
+}
 
 function verifyGoogleToken_(idToken,cfg){
   if(!idToken)throw appError_('Google 로그인이 필요합니다.','AUTH_REQUIRED');
