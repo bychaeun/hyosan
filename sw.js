@@ -1,5 +1,5 @@
-const CACHE_NAME='hyosan-lpl-v2';
-const APP_SHELL=['./','./index.html','./manifest.webmanifest','./assets/hyosan-app-icon.svg'];
+const CACHE_NAME='hyosan-lpl-v3';
+const APP_SHELL=['./','./index.html','./manifest.webmanifest','./assets/hyosan-app-icon.svg','./assets/hyosan-app-icon-192.png','./assets/hyosan-app-icon-512.png'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(APP_SHELL)).then(()=>self.skipWaiting()));
