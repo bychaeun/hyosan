@@ -1,0 +1,26 @@
+{
+  "name": "HYOSAN LPM Library",
+  "short_name": "HYOSAN LPL",
+  "description": "효산 LPM 패턴·경면판 사내 라이브러리",
+  "lang": "ko-KR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#008a30",
+  "icons": [
+    {
+      "src": "assets/hyosan-app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/hyosan-app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
