@@ -64,7 +64,7 @@
 <dialog id="userDialog"><div id="userDialogContent" class="user-admin"></div></dialog>
 <dialog id="installDialog" class="install-dialog"><div class="install-dialog-body"><div class="modal-head"><h1>앱 설치</h1><button class="close" onclick="installDialog.close()" aria-label="닫기">×</button></div><p id="installHelp" class="value"></p><div class="actions"><button class="btn" onclick="installDialog.close()">확인</button></div></div></dialog>
 <script>
-const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbxZP88WUP-WPuNIUH51C2V1zZ3DHQEKugDB-VcypCZ8Dg0a2PSXJ1c2tWiiw5K9Yl1t/exec',SYNC_MS:60000,SYNC_TIMEOUT_MS:30000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:20};
+const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbxZP88WUP-WPuNIUH51C2V1zZ3DHQEKugDB-VcypCZ8Dg0a2PSXJ1c2tWiiw5K9Yl1t/exec',SYNC_MS:60000,SYNC_TIMEOUT_MS:30000,EXPORT_TIMEOUT_MS:120000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:20};
 let db={patterns:[],lpm:[],emboss:[],categories:[],config:{}},state={patternCat:'ALL',lpmBook:'ALL',lpmCat:'ALL',pPage:1,lPage:1,ePage:1,selectedHex:'#C7A97B',modalImages:[],modalIndex:0,modalTitle:''},syncPromise=null,lastPayloadText='',appStarted=false,syncTimer=null;
 let indexes={patterns:new Map(),lpm:new Map(),emboss:new Map(),embossToLpm:new Map(),colors:[]},searchIndex=new WeakMap(),installPrompt=null;
 const auth={required:false,clientId:'',idToken:'',sessionToken:localStorage.getItem('hyosan-session')||'',user:null};
@@ -87,9 +87,9 @@ function imageUrl(u){
 function imageUrls(value){const values=(Array.isArray(value)?value:[value]).flatMap(v=>String(v||'').split(/[\r\n,;|]+/));const urls=[...new Set(values.map(v=>v.trim()).filter(v=>/^https?:\/\//i.test(v)).map(imageUrl))];return urls.length?urls:[imageUrl('')]}
 const safeImg=u=>esc(imageUrls(u)[0]);
 function setStatus(t,kind=''){const e=$('#syncStatus');e.textContent=t;e.className='status '+kind}
-async function apiPost(action,extra={}){
+async function apiPost(action,extra={},timeoutMs=CONFIG.SYNC_TIMEOUT_MS){
  const body={action,...extra};if(auth.sessionToken)body.sessionToken=auth.sessionToken;else if(auth.idToken)body.idToken=auth.idToken;
- const r=await fetch(CONFIG.API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),signal:AbortSignal.timeout(CONFIG.SYNC_TIMEOUT_MS)});
+ const r=await fetch(CONFIG.API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),signal:AbortSignal.timeout(timeoutMs)});
  if(!r.ok)throw new Error('HTTP '+r.status);const j=await r.json();if(j.ok===false)throw new Error(j.error||'요청에 실패했습니다.');return j;
 }
 async function syncData(){
@@ -148,7 +148,7 @@ async function exportSlide(id){
  exporting=true;actionStatus('Google Slides를 만들고 있습니다…');
  const popup=window.open('about:blank','_blank');if(popup)popup.opener=null;
  try{
-  const j=await apiPost('exportToSlides',{lpmId:id});
+  const j=await apiPost('exportToSlides',{lpmId:id},CONFIG.EXPORT_TIMEOUT_MS);
   const url=slidesLink(j);actionStatus(j.shareWarning?'Google Slides가 생성되었습니다. '+j.shareWarning:'Google Slides가 생성되었습니다.');const link=document.createElement('a');link.href=url;link.target='_blank';link.rel='noopener';link.textContent=' Google Slides 열기';$('#actionStatus').appendChild(link);if(popup)popup.location.href=url;
  }catch(e){if(popup)popup.close();actionStatus('Slides 내보내기 실패: '+e.message)}finally{exporting=false}
 }
@@ -166,7 +166,7 @@ function buildPrintCatalog(){
  const page=$('.page.active'),menu=$('.nav button.active').textContent,category=page.querySelector('.tabs button.active');
  const title=category?menu+' · '+category.textContent:menu;let rows=[],type='lpm';
  if(page.id==='patterns'){type='pattern';rows=db.patterns.filter(x=>(state.patternCat==='ALL'||x.PrimaryCategory===state.patternCat)&&searchOK(x))}
- else if(page.id==='lpm')rows=db.lpm.filter(x=>(state.lpmCat==='ALL'||x.Category===state.lpmCat)&&searchOK(x)&&String(x.Active).toLowerCase()!=='false');
+ else if(page.id==='lpm')rows=db.lpm.filter(x=>(state.lpmBook==='ALL'||sampleBookCode(x)===state.lpmBook)&&(state.lpmCat==='ALL'||lpmCategoryCode(x)===state.lpmCat)&&searchOK(x)&&String(x.Active).toLowerCase()!=='false');
  else if(page.id==='emboss'){type='emboss';rows=db.emboss.filter(searchOK)}
  else{const lab=rgbLab(hexRgb(state.selectedHex));rows=db.lpm.filter(x=>/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(x.ColorHex)&&String(x.Active).toLowerCase()!=='false').map(x=>({...x,_d:dE(lab,rgbLab(hexRgb(x.ColorHex)))})).filter(x=>x._d<=CONFIG.COLOR_TOLERANCE_PERCENT).sort((a,b)=>a._d-b._d)}
  const root=$('#printArea');root.replaceChildren();const pages=Math.max(1,Math.ceil(rows.length/8));
