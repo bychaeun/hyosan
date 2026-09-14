@@ -169,8 +169,21 @@ function exportToSlides_(lpmId,requesterEmail){
   addText_(slide,'특징',x,H*.55,w,18,11,true);addText_(slide,item.Characteristics||'-',x,H*.60,w,45,8,false);
   addText_(slide,'형태 / 용도',x,H*.72,w,18,11,true);addText_(slide,(item.PatternForm||'-')+'\n'+(item.Applications||'-'),x,H*.77,w,55,8,false);
   if(pres.getSlides().length>1&&!cfg.SLIDES_DESTINATION_ID)pres.getSlides()[0].remove();
-  if(requesterEmail)DriveApp.getFileById(pres.getId()).addEditor(requesterEmail);
-  return {ok:true,presentationId:pres.getId(),url:pres.getUrl()};
+  const sharing=sharePresentation_(pres.getId(),requesterEmail,cfg);
+  return {ok:true,presentationId:pres.getId(),url:pres.getUrl(),sharedWith:sharing.shared?requesterEmail:'',shareWarning:sharing.warning||''};
+}
+
+function sharePresentation_(presentationId,requesterEmail,cfg){
+  const email=String(requesterEmail||'').trim().toLowerCase();
+  if(!email)return {shared:false};
+  const owners=[Session.getEffectiveUser().getEmail(),cfg.ADMIN_EMAIL].map(v=>String(v||'').trim().toLowerCase()).filter(Boolean);
+  if(owners.includes(email))return {shared:false};
+  try{
+    const response=UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(presentationId)+'/permissions?sendNotificationEmail=false',{method:'post',contentType:'application/json',headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()},payload:JSON.stringify({type:'user',role:'writer',emailAddress:email}),muteHttpExceptions:true});
+    const code=response.getResponseCode();
+    if(code<200||code>=300)throw new Error('HTTP '+code+' '+response.getContentText().slice(0,240));
+    return {shared:true};
+  }catch(err){return {shared:false,warning:'슬라이드는 생성됐지만 요청 계정 자동 공유에 실패했습니다. 관리자에게 Drive 파일 공유 권한 승인을 요청해 주세요.'}}
 }
 
 function addText_(slide,text,x,y,w,h,size,bold){

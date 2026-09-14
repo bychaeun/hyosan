@@ -3,10 +3,15 @@
 <head>
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="googlebot" content="noindex, nofollow, noarchive">
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#008a30">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HYOSAN LPL">
 <title>HYOSAN LPM Pattern Library</title>
-<link rel="manifest" href="manifest.webmanifest">
+<link id="appManifest" rel="manifest" href="manifest.webmanifest">
+<script>if(/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent))document.getElementById('appManifest').href='mobile.webmanifest';</script>
 <link rel="icon" href="assets/hyosan-app-icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/hyosan-app-icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -34,6 +39,8 @@
 .google-gate .access-logo{width:100%;max-width:320px;margin-bottom:28px}.google-gate h1{font-size:18px;font-weight:700;margin-bottom:8px}.login-help{color:#777;font-size:12px;line-height:1.6;margin:0 0 22px}.google-button{display:flex;justify-content:center;min-height:44px}.login-status{min-height:42px;margin:18px 0 0;font-size:12px;line-height:1.6;color:#555}.login-status.err{color:#a11}.user-admin{padding:22px;background:#fff;height:100%;overflow:auto}.user-admin-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.user-table{width:100%;border-collapse:collapse;margin-top:18px;font-size:12px}.user-table th,.user-table td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}.user-table th{color:#666;font-weight:500}.status-pill{display:inline-block;padding:4px 8px;border-radius:999px;background:#eee}.status-pill.ADMIN,.status-pill.APPROVED{background:#e1f4e7;color:#176a32}.status-pill.PENDING{background:#fff1cf;color:#805d00}.status-pill.REVOKED{background:#f7dddd;color:#8c2525}.row-actions{display:flex;gap:6px;flex-wrap:wrap}@media(max-width:700px){.user-table th:nth-child(2),.user-table td:nth-child(2),.user-table th:nth-child(4),.user-table td:nth-child(4){display:none}}
 @media print{body.access-locked>#printArea{display:none!important}}
 .install-dialog{width:min(420px,90vw);height:auto}.install-dialog-body{padding:22px;background:#fff}.install-dialog-body .value{margin:18px 0 0;line-height:1.8}.install-dialog-body .actions{justify-content:flex-end}
+@media(max-width:700px){
+ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}.app{display:block;min-height:100dvh}aside{position:fixed;z-index:20;inset:auto 0 0;height:auto;padding:7px 6px calc(7px + env(safe-area-inset-bottom));box-shadow:0 -6px 24px rgba(0,0,0,.18)}.brand{display:none}.nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}.nav button{min-height:46px;padding:7px 3px;text-align:center;border-radius:8px;font-size:12px;line-height:1.25}.nav button.active{background:#fff;color:#111}main{padding:16px 14px 22px}.top{margin-bottom:12px}.top h1{font-size:20px}.tools{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:12px}.tools input{grid-column:1/-1;min-height:44px;font-size:14px}.tools .btn{min-height:42px;font-size:13px;padding:8px}.grid{grid-template-columns:1fr;gap:10px}.card{min-height:92px}.card .tag,.value,.chip,.status{font-size:13px}.tabs{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}.tabs button{flex:0 0 auto;min-height:38px;font-size:13px}#modal{inset:0;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;border-radius:0}.modal{grid-template-columns:1fr;grid-template-rows:38dvh minmax(0,1fr);height:100dvh;overflow:hidden}.img-wrap img{height:38dvh}.modal-body{padding:18px 16px calc(24px + env(safe-area-inset-bottom));overflow:auto}.close{width:38px;height:38px}.actions .btn{min-height:44px}.install-dialog{inset:auto 0 0;width:100vw;max-width:none;margin:0;border-radius:18px 18px 0 0}.install-dialog-body{padding-bottom:calc(22px + env(safe-area-inset-bottom))}}
 </style>
 </head>
 <body class="access-locked">
@@ -135,7 +142,7 @@ async function exportSlide(id){
  const popup=window.open('about:blank','_blank');if(popup)popup.opener=null;
  try{
   const j=await apiPost('exportToSlides',{lpmId:id});
-  const url=slidesLink(j);actionStatus('Google Slides가 생성되었습니다.');const link=document.createElement('a');link.href=url;link.target='_blank';link.rel='noopener';link.textContent=' Google Slides 열기';$('#actionStatus').appendChild(link);if(popup)popup.location.href=url;
+  const url=slidesLink(j);actionStatus(j.shareWarning?'Google Slides가 생성되었습니다. '+j.shareWarning:'Google Slides가 생성되었습니다.');const link=document.createElement('a');link.href=url;link.target='_blank';link.rel='noopener';link.textContent=' Google Slides 열기';$('#actionStatus').appendChild(link);if(popup)popup.location.href=url;
  }catch(e){if(popup)popup.close();actionStatus('Slides 내보내기 실패: '+e.message)}finally{exporting=false}
 }
 async function downloadCurrentImage(button){
@@ -203,12 +210,15 @@ async function changeUserStatus(encodedEmail,status){if(!(auth.user&&auth.user.i
 function logout(){if(window.google&&google.accounts)google.accounts.id.disableAutoSelect();auth.idToken='';auth.sessionToken='';localStorage.removeItem('hyosan-session');location.reload()}
 function isInstalled(){return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}
 function showInstallHelp(message){$('#installHelp').innerHTML=message;if(!installDialog.open)installDialog.showModal()}
+function isMobileDevice(){return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)}
+function isEmbeddedBrowser(){return /ChatGPT|FBAN|FBAV|Instagram|KAKAOTALK|Line\/|; wv\)/i.test(navigator.userAgent)}
 async function installApp(){
  if(isInstalled()){showInstallHelp('이 기기에는 이미 앱으로 설치되어 있습니다. 바탕 화면이나 앱 목록에서 <b>효산 LPL</b>을 실행해 주세요.');return}
  if(installPrompt){installPrompt.prompt();const result=await installPrompt.userChoice;installPrompt=null;if(result.outcome==='dismissed')showInstallHelp('설치가 취소되었습니다. 다시 설치하려면 <b>앱 설치</b> 버튼을 눌러 주세요.');return}
- const ios=/iPad|iPhone|iPod/.test(navigator.userAgent);showInstallHelp(ios?'iPhone·iPad는 파일 다운로드 방식이 아니라 Safari 하단의 <b>공유</b> 버튼 → <b>홈 화면에 추가</b>를 선택해 설치합니다.':'이 브라우저에서는 자동 설치 창을 열 수 없습니다. Chrome 또는 Edge로 접속한 뒤 메뉴의 <b>앱 설치</b> 또는 <b>홈 화면에 추가</b>를 선택해 주세요.');
+ const ios=/iPad|iPhone|iPod/.test(navigator.userAgent);if(isEmbeddedBrowser()){showInstallHelp('현재 앱 안의 브라우저에서는 설치할 수 없습니다. 화면 메뉴에서 <b>기본 브라우저로 열기</b>를 선택한 뒤 Android는 Chrome, iPhone은 Safari에서 설치해 주세요.');return}showInstallHelp(ios?'iPhone·iPad는 Safari의 <b>공유</b> 버튼 → <b>홈 화면에 추가</b> → <b>추가</b>를 선택하면 모바일 앱으로 설치됩니다.':'Android Chrome의 오른쪽 위 <b>⋮ 메뉴</b> → <b>앱 설치</b> 또는 <b>홈 화면에 추가</b>를 선택해 주세요. PC는 Chrome·Edge 주소창의 설치 아이콘을 사용할 수 있습니다.');
 }
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e});window.addEventListener('appinstalled',()=>{installPrompt=null});
+$('#installButton').textContent=isMobileDevice()?'모바일 앱 설치':'웹 앱 설치';
 $('#installButton').onclick=installApp;$('#userAdminButton').onclick=showUserAdmin;$('#logoutButton').onclick=logout;bootstrapAccess();
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 </script>
