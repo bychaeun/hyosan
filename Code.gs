@@ -164,10 +164,11 @@ function exportToSlides_(lpmId,requesterEmail){
   if(slideImage){try{slide.insertImage(slideImage,0,0,W*.58,H)}catch(e){}}
   const x=W*.62,w=W*.32;
   addText_(slide,item.ProductName||'',x,H*.12,w,40,15,true);
-  addText_(slide,'품번',x,H*.27,w,18,11,true);addText_(slide,item.ProductCode||'-',x,H*.32,w,28,8,false);
-  addText_(slide,'분류',x,H*.41,w,18,11,true);addText_(slide,(item.Category||'')+' / '+(item.SubCategory||''),x,H*.46,w,28,8,false);
-  addText_(slide,'특징',x,H*.55,w,18,11,true);addText_(slide,item.Characteristics||'-',x,H*.60,w,45,8,false);
-  addText_(slide,'형태 / 용도',x,H*.72,w,18,11,true);addText_(slide,(item.PatternForm||'-')+'\n'+(item.Applications||'-'),x,H*.77,w,55,8,false);
+  addText_(slide,'품번',x,H*.23,w,18,11,true);addText_(slide,item.ProductCode||'-',x,H*.28,w,24,8,false);
+  addText_(slide,'종이 넘버',x,H*.36,w,18,11,true);addText_(slide,item.PaperNumber||item.PaperNo||item.PatternForm||'-',x,H*.41,w,24,8,false);
+  addText_(slide,'분류',x,H*.49,w,18,11,true);addText_(slide,(item.Category||'')+' / '+(item.SubCategory||''),x,H*.54,w,24,8,false);
+  addText_(slide,'특징',x,H*.62,w,18,11,true);addText_(slide,item.Characteristics||'-',x,H*.67,w,38,8,false);
+  addText_(slide,'용도',x,H*.78,w,18,11,true);addText_(slide,item.Applications||'-',x,H*.83,w,38,8,false);
   if(pres.getSlides().length>1&&!cfg.SLIDES_DESTINATION_ID)pres.getSlides()[0].remove();
   const sharing=sharePresentation_(pres.getId(),requesterEmail,cfg);
   return {ok:true,presentationId:pres.getId(),url:pres.getUrl(),sharedWith:sharing.shared?requesterEmail:'',shareWarning:sharing.warning||''};
