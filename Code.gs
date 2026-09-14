@@ -176,7 +176,7 @@ function exportToSlides_(lpmId,requesterEmail){
 function sharePresentation_(presentationId,requesterEmail,cfg){
   const email=String(requesterEmail||'').trim().toLowerCase();
   if(!email)return {shared:false};
-  const owners=[Session.getEffectiveUser().getEmail(),cfg.ADMIN_EMAIL].map(v=>String(v||'').trim().toLowerCase()).filter(Boolean);
+  const owners=[cfg.ADMIN_EMAIL].map(v=>String(v||'').trim().toLowerCase()).filter(Boolean);
   if(owners.includes(email))return {shared:false};
   try{
     const response=UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(presentationId)+'/permissions?sendNotificationEmail=false',{method:'post',contentType:'application/json',headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()},payload:JSON.stringify({type:'user',role:'writer',emailAddress:email}),muteHttpExceptions:true});
