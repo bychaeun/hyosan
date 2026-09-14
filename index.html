@@ -4,9 +4,14 @@
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="googlebot" content="noindex, nofollow, noarchive">
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#008a30">
 <title>HYOSAN LPM Pattern Library</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/hyosan-app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/hyosan-app-icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{--bg:#f4f2ed;--panel:#fff;--ink:#151515;--muted:#777;--line:#ded9cf;--dark:#151515}*{box-sizing:border-box}body{margin:0;font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink)}button,input{font-family:inherit}.app{display:grid;grid-template-columns:230px 1fr;min-height:100vh}aside{background:#151515;color:#fff;padding:22px 16px;position:sticky;top:0;height:100vh}.brand{font-size:15pt;font-weight:700;line-height:1.15;margin-bottom:24px}.brand small{display:block;font-size:8pt;color:#999;font-weight:400;margin-top:8px}.nav button{display:block;width:100%;border:0;background:transparent;color:#ccc;text-align:left;padding:11px 10px;border-radius:9px;font-size:11pt;cursor:pointer}.nav button.active,.nav button:hover{background:#fff;color:#111}main{padding:26px;min-width:0}h1{font-size:15pt;margin:0 0 6px}h2,.label{font-size:11pt}p,.tag,.value,.chip,.status,input,button{font-size:8pt}.top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:16px}.status{color:var(--muted)}.status.ok{color:#23652e}.status.err{color:#a11}.tools{display:flex;gap:8px;flex-wrap:wrap}.tools input{min-width:220px;padding:9px 10px;border:1px solid var(--line);border-radius:9px}.btn{border:1px solid #222;background:#222;color:#fff;padding:8px 11px;border-radius:9px;cursor:pointer}.btn.ghost{background:#fff;color:#222;border-color:var(--line)}.page{display:none}.page.active{display:block}.tabs{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0 16px}.tabs button{border:1px solid var(--line);background:#fff;padding:7px 10px;border-radius:999px;cursor:pointer}.tabs button.active{background:#111;color:#fff}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}.card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;cursor:pointer;transition:.15s}.card:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(0,0,0,.07)}.card img{width:100%;height:132px;object-fit:cover;display:block;background:#ddd}.card .body{padding:10px}.card .tag{color:#777}.pager{display:flex;justify-content:center;gap:6px;margin:18px 0}.pager button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 9px}.pager button.active{background:#111;color:#fff}.color-layout{display:grid;grid-template-columns:360px 1fr;gap:20px}.panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px}.wheel-wrap{position:relative;width:300px;height:300px;margin:auto}.wheel-wrap canvas{width:300px;height:300px;border-radius:50%;cursor:crosshair}.picker{position:absolute;width:14px;height:14px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #111;pointer-events:none;transform:translate(-7px,-7px)}.slider-row{display:grid;grid-template-columns:50px 1fr 34px;gap:8px;align-items:center;margin:10px 0}.selected{display:grid;grid-template-columns:68px 1fr;gap:10px;align-items:center;margin-top:14px}.swatch{height:62px;border-radius:10px;border:1px solid var(--line)}dialog{border:0;border-radius:18px;padding:0;max-width:980px;width:86vw;height:min(700px,86vh);box-shadow:0 30px 80px rgba(0,0,0,.35)}dialog::backdrop{background:rgba(0,0,0,.4)}#modalContent{height:100%}.modal{display:grid;grid-template-columns:48% 52%;height:100%;background:#fff;overflow:hidden}.img-wrap{overflow:hidden;background:#171717;cursor:zoom-in;min-height:0}.img-wrap img{width:100%;height:100%;min-height:0;object-fit:cover;display:block}.modal-body{padding:22px;overflow:auto}.modal-head{display:flex;justify-content:space-between;gap:8px}.close{width:30px;height:30px;border:0;border-radius:50%;background:#111;color:#fff;cursor:pointer;font-size:11pt}.meta{border-top:1px solid var(--line);padding-top:9px;margin-top:12px}.label{font-weight:700;margin-bottom:5px}.value{line-height:1.65}.chip{border:1px solid var(--line);background:#fafafa;border-radius:999px;padding:6px 8px;cursor:pointer;margin:2px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.muted{color:var(--muted)}@media(max-width:900px){.app{grid-template-columns:1fr}aside{position:relative;height:auto}.top{display:block}.color-layout,.modal{grid-template-columns:1fr}.wheel-wrap,.wheel-wrap canvas{width:260px;height:260px}}
 #patternGrid .card{display:flex;align-items:center}#patternGrid .card img{width:84px;height:84px;flex-shrink:0}#patternGrid .card h2{margin:0 0 6px}.card:focus-visible{outline:3px solid #876e47}.pager{flex-wrap:wrap}@media(max-width:900px){dialog{max-height:90vh;overflow:auto}.modal{max-height:none;overflow:visible}.img-wrap img{min-height:0;height:240px}.modal-body{overflow:visible}.top input{min-width:0;width:100%}}
@@ -26,6 +31,7 @@
 }
 
 .access-locked{background:#fff}.access-locked .app{display:none}.access-gate{min-height:100dvh;display:grid;place-items:center;padding:32px 24px}.access-gate[hidden]{display:none}.access-panel{width:min(100%,320px);text-align:center}.access-logo{display:block;width:100%;height:auto;margin:0 auto 48px}.access-panel h1{font-size:15px;font-weight:400;margin:0 0 20px}.access-panel input{display:block;width:180px;margin:0 auto;text-align:center;font-size:30px;letter-spacing:16px;text-indent:16px;padding:10px 0;border:0;border-radius:0;background:transparent;outline:none;box-shadow:0 1px 0 #ddd}.access-panel input::placeholder{color:#d6d6d6}.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:264px;margin:auto}.pin-pad button{min-height:56px;border:0;border-radius:50%;background:transparent;font-size:23px;cursor:pointer}.pin-pad button:hover{background:#f4f4f4}.pin-pad button:focus-visible{outline:2px solid #008844}.pin-pad .pin-edit{font-size:12px;color:#777}.pin-message{min-height:22px;margin:8px 0 18px;font-size:12px;color:#a11}
+.google-gate .access-logo{width:112px;margin-bottom:28px}.google-gate h1{font-size:18px;font-weight:700;margin-bottom:8px}.login-help{color:#777;font-size:12px;line-height:1.6;margin:0 0 22px}.google-button{display:flex;justify-content:center;min-height:44px}.login-status{min-height:42px;margin:18px 0 0;font-size:12px;line-height:1.6;color:#555}.login-status.err{color:#a11}.user-admin{padding:22px;background:#fff;height:100%;overflow:auto}.user-admin-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.user-table{width:100%;border-collapse:collapse;margin-top:18px;font-size:12px}.user-table th,.user-table td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}.user-table th{color:#666;font-weight:500}.status-pill{display:inline-block;padding:4px 8px;border-radius:999px;background:#eee}.status-pill.ADMIN,.status-pill.APPROVED{background:#e1f4e7;color:#176a32}.status-pill.PENDING{background:#fff1cf;color:#805d00}.status-pill.REVOKED{background:#f7dddd;color:#8c2525}.row-actions{display:flex;gap:6px;flex-wrap:wrap}@media(max-width:700px){.user-table th:nth-child(2),.user-table td:nth-child(2),.user-table th:nth-child(4),.user-table td:nth-child(4){display:none}}
 @media print{body.access-locked>#printArea{display:none!important}}
 </style>
 </head>
@@ -40,7 +46,7 @@
 
 </form></section>
 <div class="app"><aside><div class="brand">HYOSAN<br>LPM Library<small>LIVE · Google Sheets Sync</small></div><div class="nav"><button class="active" data-page="patterns">패턴 디자인</button><button data-page="lpm">효산 LPM 디자인</button><button data-page="emboss">경면판</button><button data-page="colorist">컬러리스트</button></div></aside>
-<main><div class="top"><div><h1 id="pageTitle">패턴 디자인</h1><div id="syncStatus" class="status">데이터 연결 대기</div></div><div class="tools"><input id="search" placeholder="이름 / 분류 / 품번 검색"><button class="btn ghost" id="reload">지금 동기화</button><button class="btn ghost" onclick="printCatalog()">PDF 저장</button></div></div>
+<main><div class="top"><div><h1 id="pageTitle">패턴 디자인</h1><div id="syncStatus" class="status">데이터 연결 대기</div></div><div class="tools"><input id="search" placeholder="이름 / 분류 / 품번 검색"><button class="btn ghost" id="reload">지금 동기화</button><button class="btn ghost" onclick="printCatalog()">PDF 저장</button><button class="btn ghost" id="userAdminButton" hidden>사용자 관리</button><button class="btn ghost" id="logoutButton" hidden>로그아웃</button></div></div>
 <section id="patterns" class="page active"><div class="tabs" id="patternTabs"></div><div class="grid" id="patternGrid"></div><div class="pager" id="patternPager"></div></section>
 <section id="lpm" class="page"><div class="tabs" id="lpmTabs"></div><div class="grid" id="lpmGrid"></div><div class="pager" id="lpmPager"></div></section>
 <section id="emboss" class="page"><div class="grid" id="embossGrid"></div></section>
@@ -48,9 +54,11 @@
 </main></div>
 <div id="printArea" aria-hidden="true"></div>
 <dialog id="modal"><div id="modalContent"></div></dialog>
+<dialog id="userDialog"><div id="userDialogContent" class="user-admin"></div></dialog>
 <script>
 const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbz2_7sYLn86R2WomTWsgeydGw9vy99f3EuF7RGVnt-wE_Y1yH_hUtjtgAwEFezXkkAu/exec',SYNC_MS:60000,SYNC_TIMEOUT_MS:30000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:20};
-let db={patterns:[],lpm:[],emboss:[],categories:[],config:{}},state={patternCat:'ALL',lpmCat:'ALL',pPage:1,lPage:1,selectedHex:'#C7A97B',modalImages:[],modalIndex:0,modalTitle:''},syncPromise=null,lastPayloadText='';
+let db={patterns:[],lpm:[],emboss:[],categories:[],config:{}},state={patternCat:'ALL',lpmCat:'ALL',pPage:1,lPage:1,selectedHex:'#C7A97B',modalImages:[],modalIndex:0,modalTitle:''},syncPromise=null,lastPayloadText='',appStarted=false,syncTimer=null;
+const auth={required:false,clientId:'',idToken:'',user:null};
 const $=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)],split=v=>String(v||'').split(',').map(x=>x.trim()).filter(Boolean);
 function imageUrl(u){
  const raw=String(u||'').trim(),fallback='https://placehold.co/800x600/e7e2d9/555?text=No+Image';
@@ -67,7 +75,19 @@ function imageUrl(u){
 function imageUrls(value){const values=(Array.isArray(value)?value:[value]).flatMap(v=>String(v||'').split(/[\r\n,;|]+/));const urls=[...new Set(values.map(v=>v.trim()).filter(v=>/^https?:\/\//i.test(v)).map(imageUrl))];return urls.length?urls:[imageUrl('')]}
 const safeImg=u=>esc(imageUrls(u)[0]);
 function setStatus(t,kind=''){const e=$('#syncStatus');e.textContent=t;e.className='status '+kind}
-async function syncData(){if(!CONFIG.API_URL){setStatus('Apps Script URL 설정 필요','err');return}if(syncPromise)return syncPromise;syncPromise=(async()=>{try{setStatus('Google Sheets 동기화 중…');const r=await fetch(CONFIG.API_URL+'?action=data&ts='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(CONFIG.SYNC_TIMEOUT_MS)});if(!r.ok)throw new Error('HTTP '+r.status);const payload=await r.text(),j=JSON.parse(payload);if(j.ok===false||!['patterns','lpm','emboss','categories'].every(k=>Array.isArray(j[k])))throw new Error(j.error||'잘못된 데이터 응답');if(payload!==lastPayloadText){db=j;lastPayloadText=payload;renderAll()}setStatus('최신 Google Sheets 반영 · '+new Date().toLocaleTimeString(),'ok')}catch(e){setStatus('동기화 실패 · '+e.message,'err')}})().finally(()=>{syncPromise=null});return syncPromise}
+async function apiPost(action,extra={}){
+ const body={action,...extra};if(auth.idToken)body.idToken=auth.idToken;
+ const r=await fetch(CONFIG.API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),signal:AbortSignal.timeout(CONFIG.SYNC_TIMEOUT_MS)});
+ if(!r.ok)throw new Error('HTTP '+r.status);const j=await r.json();if(j.ok===false)throw new Error(j.error||'요청에 실패했습니다.');return j;
+}
+async function syncData(){
+ if(!CONFIG.API_URL){setStatus('Apps Script URL 설정 필요','err');return}if(syncPromise)return syncPromise;
+ syncPromise=(async()=>{try{
+  setStatus('Google Sheets 동기화 중…');let j,payload;
+  if(auth.required){j=await apiPost('data');payload=JSON.stringify(j)}else{const r=await fetch(CONFIG.API_URL+'?action=data&ts='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(CONFIG.SYNC_TIMEOUT_MS)});if(!r.ok)throw new Error('HTTP '+r.status);payload=await r.text();j=JSON.parse(payload)}
+  if(j.ok===false||!['patterns','lpm','emboss','categories'].every(k=>Array.isArray(j[k])))throw new Error(j.error||'잘못된 데이터 응답');if(payload!==lastPayloadText){db=j;lastPayloadText=payload;renderAll()}setStatus('최신 Google Sheets 반영 · '+new Date().toLocaleTimeString(),'ok')
+ }catch(e){setStatus('동기화 실패 · '+e.message,'err')}})().finally(()=>{syncPromise=null});return syncPromise;
+}
 function searchOK(x){const q=$('#search').value.trim().toLowerCase();return !q||JSON.stringify(x).toLowerCase().includes(q)}
 function tabs(el,items,active,cb){el.innerHTML='';items.forEach(x=>{const b=document.createElement('button');b.textContent=x.label;b.className=x.code===active?'active':'';b.onclick=()=>cb(x.code);el.appendChild(b)})}
 function cats(menu,fallback){const rows=(db.categories||[]).filter(x=>x.Menu===menu);return rows.length?rows.map(x=>({code:x.Code,label:x.Label})):fallback}
@@ -105,8 +125,7 @@ async function exportSlide(id){
  exporting=true;actionStatus('Google Slides를 만들고 있습니다…');
  const popup=window.open('about:blank','_blank');if(popup)popup.opener=null;
  try{
-  const r=await fetch(CONFIG.API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'exportToSlides',lpmId:id})});
-  if(!r.ok)throw new Error('서버 응답 '+r.status);const j=await r.json();if(!j.ok)throw new Error(j.error||'내보내기에 실패했습니다.');
+  const j=await apiPost('exportToSlides',{lpmId:id});
   const url=slidesLink(j);actionStatus('Google Slides가 생성되었습니다.');const link=document.createElement('a');link.href=url;link.target='_blank';link.rel='noopener';link.textContent=' Google Slides 열기';$('#actionStatus').appendChild(link);if(popup)popup.location.href=url;
  }catch(e){if(popup)popup.close();actionStatus('Slides 내보내기 실패: '+e.message)}finally{exporting=false}
 }
@@ -139,20 +158,46 @@ function renderAll(){renderPatterns();renderLpm();renderEmboss();drawWheel();$('
 qa('.nav button').forEach(b=>b.onclick=()=>{qa('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');qa('.page').forEach(x=>x.classList.remove('active'));$('#'+b.dataset.page).classList.add('active');$('#pageTitle').textContent=b.textContent});$('#search').oninput=()=>{state.pPage=1;state.lPage=1;renderPatterns();renderLpm();renderEmboss()};$('#reload').onclick=syncData;$('#wheel').onclick=pick;['sat','light'].forEach(id=>$('#'+id).oninput=()=>{drawWheel();if(state.wheelPoint){const rgb=hslRgb(state.wheelPoint.h,+$('#sat').value*state.wheelPoint.ratio,+$('#light').value);state.selectedHex=rgbHex(rgb.r,rgb.g,rgb.b);$('#swatch').style.background=state.selectedHex;$('#hex').textContent=state.selectedHex}renderColor()});$('#modal').addEventListener('click',e=>{const r=modal.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)modal.close()});
 $('#modal').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();changeModalImage(-1)}else if(e.key==='ArrowRight'){e.preventDefault();changeModalImage(1)}});
 
-// This PIN is a presentation gate only, not server-side authentication.
-const pinInput=$('#accessPin');
-let entered=false;
-function checkPin(){
- if(entered||pinInput.value.length!==4)return;
- if(pinInput.value!=='8913'){$('#pinMessage').textContent='비밀번호가 틀렸습니다. 다시 입력해주세요.';pinInput.value='';pinInput.focus();return}
- entered=true;pinInput.value='';$('#accessGate').hidden=true;document.body.classList.remove('access-locked');
- renderAll();syncData();setInterval(()=>{if(!document.hidden)syncData()},CONFIG.SYNC_MS);document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncData()});$('#search').focus();
+function startApp(user=null){
+ if(appStarted)return;appStarted=true;auth.user=user;$('#accessGate').hidden=true;document.body.classList.remove('access-locked');
+ $('#userAdminButton').hidden=!(user&&user.isAdmin);$('#logoutButton').hidden=!auth.required;
+ renderAll();syncData();syncTimer=setInterval(()=>{if(!document.hidden)syncData()},CONFIG.SYNC_MS);document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncData()});$('#search').focus();
 }
-pinInput.oninput=()=>{pinInput.value=pinInput.value.replace(/[^0-9]/g,'').slice(0,4);$('#pinMessage').textContent='';checkPin()};
-qa('[data-digit]').forEach(button=>button.onclick=()=>{pinInput.value=(pinInput.value+button.dataset.digit).slice(0,4);$('#pinMessage').textContent='';checkPin()});
-$('#pinClear').onclick=()=>{pinInput.value='';$('#pinMessage').textContent=''};
-$('#pinBack').onclick=()=>{pinInput.value=pinInput.value.slice(0,-1);$('#pinMessage').textContent=''};
-$('#accessForm').onsubmit=e=>{e.preventDefault();checkPin()};
+function loginStatus(message,isError=false){const el=$('#loginStatus');if(el){el.textContent=message;el.className='login-status'+(isError?' err':'')}}
+async function handleGoogleCredential(response){
+ auth.idToken=response.credential||'';loginStatus('계정과 사용 권한을 확인하고 있습니다…');
+ try{
+  const r=await fetch(CONFIG.API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'authStatus',idToken:auth.idToken}),signal:AbortSignal.timeout(CONFIG.SYNC_TIMEOUT_MS)}),j=await r.json();
+  if(j.status==='ADMIN'||j.status==='APPROVED'){startApp(j.user);return}
+  auth.idToken='';loginStatus(j.message||'관리자 승인을 기다리고 있습니다.',j.status==='REVOKED');
+ }catch(e){auth.idToken='';loginStatus('로그인을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요. '+e.message,true)}
+}
+function showGoogleGate(){
+ const form=$('#accessForm');form.className='access-panel google-gate';form.innerHTML='<img class="access-logo" src="assets/hyosan-app-icon.svg" alt="HYOSAN 앱 아이콘"><h1 id="accessTitle">HYOSAN LPM Library</h1><p class="login-help">회사에서 사용할 Google 계정으로 로그인해 주세요.<br>최초 로그인 후 관리자의 승인이 필요합니다.</p><div id="googleButton" class="google-button"></div><p id="loginStatus" class="login-status" role="status"></p>';
+ const init=()=>{if(!(window.google&&google.accounts&&google.accounts.id)){setTimeout(init,150);return}google.accounts.id.initialize({client_id:auth.clientId,callback:handleGoogleCredential,auto_select:false});google.accounts.id.renderButton($('#googleButton'),{theme:'outline',size:'large',shape:'pill',text:'signin_with',locale:'ko',width:280})};init();
+}
+function setupPinGate(){
+ const pinInput=$('#accessPin');let entered=false;if(!pinInput)return;
+ function checkPin(){if(entered||pinInput.value.length!==4)return;if(pinInput.value!=='8913'){$('#pinMessage').textContent='비밀번호가 틀렸습니다. 다시 입력해주세요.';pinInput.value='';pinInput.focus();return}entered=true;pinInput.value='';startApp()}
+ pinInput.oninput=()=>{pinInput.value=pinInput.value.replace(/[^0-9]/g,'').slice(0,4);$('#pinMessage').textContent='';checkPin()};qa('[data-digit]').forEach(button=>button.onclick=()=>{pinInput.value=(pinInput.value+button.dataset.digit).slice(0,4);$('#pinMessage').textContent='';checkPin()});$('#pinClear').onclick=()=>{pinInput.value='';$('#pinMessage').textContent=''};$('#pinBack').onclick=()=>{pinInput.value=pinInput.value.slice(0,-1);$('#pinMessage').textContent=''};$('#accessForm').onsubmit=e=>{e.preventDefault();checkPin()};pinInput.focus();
+}
+async function bootstrapAccess(){
+ try{const r=await fetch(CONFIG.API_URL+'?action=appConfig&ts='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(10000)}),j=await r.json();auth.required=j.authRequired===true;auth.clientId=String(j.clientId||'');if(auth.required&&auth.clientId){showGoogleGate();return}}
+ catch(e){}
+ setupPinGate();
+}
+async function showUserAdmin(){
+ const dialog=$('#userDialog'),root=$('#userDialogContent');root.innerHTML='<div class="user-admin-head"><h1>사용자 관리</h1><button class="close" onclick="userDialog.close()">×</button></div><p class="muted">사용자 목록을 불러오는 중…</p>';if(!dialog.open)dialog.showModal();
+ try{const j=await apiPost('listUsers');renderUserRows(j.users||[])}catch(e){root.insertAdjacentHTML('beforeend','<p class="status err">'+esc(e.message)+'</p>')}
+}
+function renderUserRows(users){
+ const rows=users.map(u=>`<tr><td>${esc(u.email)}</td><td>${esc(u.name||'-')}</td><td><span class="status-pill ${esc(u.status)}">${esc(u.status)}</span></td><td>${esc(u.lastLoginAt||'-')}</td><td><div class="row-actions">${u.status==='ADMIN'?'관리자':`<button class="btn" onclick="changeUserStatus('${encodeURIComponent(u.email)}','APPROVED')">승인</button><button class="btn ghost" onclick="changeUserStatus('${encodeURIComponent(u.email)}','REVOKED')">중지</button>`}</div></td></tr>`).join('');
+ $('#userDialogContent').innerHTML=`<div class="user-admin-head"><div><h1>사용자 관리</h1><div class="muted">가입 요청 승인 및 사용 중지</div></div><button class="close" onclick="userDialog.close()">×</button></div><table class="user-table"><thead><tr><th>이메일</th><th>이름</th><th>상태</th><th>최근 접속</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function changeUserStatus(encodedEmail,status){try{await apiPost('setUserStatus',{email:decodeURIComponent(encodedEmail),status});await showUserAdmin()}catch(e){alert(e.message)}}
+function logout(){if(window.google&&google.accounts)google.accounts.id.disableAutoSelect();auth.idToken='';location.reload()}
+$('#userAdminButton').onclick=showUserAdmin;$('#logoutButton').onclick=logout;bootstrapAccess();
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 </script>
 </body></html>
 
