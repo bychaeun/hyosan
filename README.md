@@ -31,6 +31,7 @@ ChatGPT 등 앱 내부 브라우저에서는 설치 메뉴가 제공되지 않�
 - `Category`: `WOOD`, `SOLID`, `STONE`, `FABRIC`, `OTHER` 중 하나
 - `PaperNumber`: 팝업과 Slides의 `종이 넘버`에 표시
 - `BasePaperCompany`: 팝업에서 `종이 넘버` 옆의 `원지 회사명`으로 표시
+- `PreviousNames`: 제품명이 바뀌기 전에 쓰이던 이전 이름들 (쉼표로 구분). 값이 있으면 팝업의 제품명 바로 아래에 "이전 제품명: ..."으로 표시되고, 검색에도 포함됩니다. 비워두면 표시 안 됨
 
 중복되던 `ProductCode`와 값이 없던 `Characteristics` 열은 제거했습니다. 기존 `PatternForm` 값은 `PaperNumber`로 이름을 바꿔 그대로 유지합니다.
 
