@@ -30,6 +30,7 @@ ChatGPT 등 앱 내부 브라우저에서는 설치 메뉴가 제공되지 않�
 - `SampleBook`: `SOLID_BOOK`, `CHART_COLLAB_2022`, `EXISTING_2021`, `NEW_2022` 중 하나
 - `Category`: `WOOD`, `SOLID`, `STONE`, `FABRIC`, `OTHER` 중 하나
 - `PaperNumber`: 팝업과 Slides의 `종이 넘버`에 표시
+- `BasePaperCompany`: 팝업에서 `종이 넘버` 옆의 `원지 회사명`으로 표시
 
 중복되던 `ProductCode`와 값이 없던 `Characteristics` 열은 제거했습니다. 기존 `PatternForm` 값은 `PaperNumber`로 이름을 바꿔 그대로 유지합니다.
 
