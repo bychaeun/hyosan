@@ -87,6 +87,8 @@ function imageUrl(u){
 }
 function imageUrls(value){const values=(Array.isArray(value)?value:[value]).flatMap(v=>String(v||'').split(/[\r\n,;|]+/));const urls=[...new Set(values.map(v=>v.trim()).filter(v=>/^https?:\/\//i.test(v)).map(imageUrl))];return urls.length?urls:[imageUrl('')]}
 const safeImg=u=>esc(imageUrls(u)[0]);
+function driveFileId(value){try{const url=new URL(String(value||''));if(!/(^|\.)drive\.google\.com$/i.test(url.hostname)&&!/(^|\.)drive\.usercontent\.google\.com$/i.test(url.hostname))return '';const match=url.pathname.match(/^\/file\/d\/([^/]+)/);return (match&&match[1])||url.searchParams.get('id')||''}catch(e){return ''}}
+function triggerImageDownload(url,name){const link=document.createElement('a');link.href=url;link.download=(name||'HYOSAN').replace(/[\\/:*?"<>|]/g,'_');link.rel='noopener';document.body.appendChild(link);link.click();link.remove()}
 function setStatus(t,kind=''){const e=$('#syncStatus');e.textContent=t;e.className='status '+kind}
 async function apiPost(action,extra={},timeoutMs=CONFIG.SYNC_TIMEOUT_MS){
  const body={action,...extra};if(auth.sessionToken)body.sessionToken=auth.sessionToken;else if(auth.idToken)body.idToken=auth.idToken;
@@ -109,7 +111,7 @@ function rebuildIndexes(){
 function searchOK(x){const q=$('#search').value.trim().toLowerCase();if(!q)return true;let text=searchIndex.get(x);if(!text){text=JSON.stringify(x).toLowerCase();searchIndex.set(x,text)}return text.includes(q)}
 function tabs(el,items,active,cb){el.innerHTML='';items.forEach(x=>{const b=document.createElement('button');b.textContent=x.label;b.className=x.code===active?'active':'';b.onclick=()=>cb(x.code);el.appendChild(b)})}
 function cats(menu,fallback){const rows=(db.categories||[]).filter(x=>x.Menu===menu);return rows.length?rows.map(x=>({code:x.Code,label:x.Label})):fallback}
-const LPM_BOOKS=[{code:'ALL',label:'전체'},{code:'SOLID_BOOK',label:'솔리드'},{code:'CHART_COLLAB_2022',label:'샤트콜라보2022'},{code:'EXISTING_2021',label:'기존 2021'},{code:'NEW_2022',label:'신규 2022'}];
+const LPM_BOOKS=[{code:'ALL',label:'전체'},{code:'SOLID_BOOK',label:'솔리드'},{code:'CHART_COLLAB_2022',label:'샤트콜라보'},{code:'EXISTING_2021',label:'기존'},{code:'NEW_2022',label:'신규'}];
 const LPM_CATEGORIES=[{code:'ALL',label:'전체'},{code:'WOOD',label:'우드'},{code:'SOLID',label:'솔리드'},{code:'STONE',label:'스톤 · 타일'},{code:'FABRIC',label:'패브릭 · 텍스처'},{code:'OTHER',label:'기타'}];
 function compactCode(value){return String(value||'').trim().toUpperCase().replace(/[\s·._-]+/g,'')}
 function sampleBookCode(x){const raw=compactCode(x.SampleBook||x.SampleBookType||x.Collection||x.Series||x.Book);if(!raw)return '';if(raw.includes('샤트콜라보')||raw.includes('CHARTCOLLAB'))return 'CHART_COLLAB_2022';if(raw.includes('기존')||raw.includes('EXISTING')||raw==='2021')return 'EXISTING_2021';if(raw.includes('신규')||raw.includes('NEW'))return 'NEW_2022';if(raw.includes('솔리드')||raw.includes('SOLID'))return 'SOLID_BOOK';return raw}
@@ -157,11 +159,12 @@ async function downloadCurrentImage(button){
  const item={...state.modalImage};if(!/^https?:\/\//i.test(item.url||'')){actionStatus('등록된 이미지가 없습니다. 이미지 URL을 입력해 주세요.');return}
  button.disabled=true;actionStatus('이미지를 저장하고 있습니다…');
  try{
+  const driveId=driveFileId(item.url);if(driveId){triggerImageDownload('https://drive.usercontent.google.com/download?id='+encodeURIComponent(driveId)+'&export=download&confirm=t',item.name);actionStatus('이미지 다운로드를 시작했습니다.');return}
   const r=await fetch(item.url,{signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('이미지 응답 '+r.status);
   const blob=await r.blob();if(!blob.type.startsWith('image/'))throw Error('이미지 파일 주소가 아닙니다.');
   const ext=({'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','image/svg+xml':'svg'})[blob.type]||'img';
-  const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=(item.name||'HYOSAN').replace(/[\\/:*?"<>|]/g,'_')+'.'+ext;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);actionStatus('이미지 다운로드를 시작했습니다.');
- }catch(e){actionStatus('이미지 서버에서 다운로드를 허용하지 않거나 주소를 읽을 수 없습니다. '+e.message)}finally{button.disabled=false}
+  const url=URL.createObjectURL(blob);triggerImageDownload(url,(item.name||'HYOSAN')+'.'+ext);setTimeout(()=>URL.revokeObjectURL(url),60000);actionStatus('이미지 다운로드를 시작했습니다.');
+ }catch(e){triggerImageDownload(item.url,item.name);actionStatus('직접 다운로드를 요청했습니다. 새 창이나 다운로드 목록을 확인해 주세요.')}finally{button.disabled=false}
 }
 function buildPrintCatalog(){
  const page=$('.page.active'),menu=$('.nav button.active').textContent,category=page.querySelector('.tabs button.active');
