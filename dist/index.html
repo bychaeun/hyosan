@@ -91,10 +91,21 @@ const safeImg=u=>esc(imageUrls(u)[0]);
 function driveFileId(value){try{const url=new URL(String(value||''));if(!/(^|\.)drive\.google\.com$/i.test(url.hostname)&&!/(^|\.)drive\.usercontent\.google\.com$/i.test(url.hostname))return '';const match=url.pathname.match(/^\/file\/d\/([^/]+)/);return (match&&match[1])||url.searchParams.get('id')||''}catch(e){return ''}}
 function triggerImageDownload(url,name){const link=document.createElement('a');link.href=url;link.download=(name||'HYOSAN').replace(/[\\/:*?"<>|]/g,'_');link.rel='noopener';document.body.appendChild(link);link.click();link.remove()}
 function setStatus(t,kind=''){const e=$('#syncStatus');e.textContent=t;e.className='status '+kind}
+async function responseJson(r){
+ const text=await r.text();
+ if(!r.ok)throw new Error('HTTP '+r.status);
+ try{return JSON.parse(text)}catch(e){throw new Error(/^\s*</.test(text)?'로그인 서버가 임시 HTML 응답을 반환했습니다.':'로그인 서버 응답 형식을 확인할 수 없습니다.')}
+}
 async function apiPost(action,extra={},timeoutMs=CONFIG.SYNC_TIMEOUT_MS){
  const body={action,...extra};if(auth.sessionToken)body.sessionToken=auth.sessionToken;else if(auth.idToken)body.idToken=auth.idToken;
- const r=await fetch(CONFIG.API_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=utf-8'},body:JSON.stringify(body),signal:AbortSignal.timeout(timeoutMs)});
- if(!r.ok)throw new Error('HTTP '+r.status);const j=await r.json();if(j.ok===false)throw new Error(j.error||'요청에 실패했습니다.');return j;
+ let lastError;
+ for(let attempt=0;attempt<2;attempt++){
+  try{
+   const r=await fetch(CONFIG.API_URL+'?ts='+Date.now(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8','Accept':'application/json'},body:JSON.stringify(body),cache:'no-store',redirect:'follow',signal:AbortSignal.timeout(timeoutMs)});
+   const j=await responseJson(r);if(j.ok===false)throw new Error(j.error||'요청에 실패했습니다.');return j;
+  }catch(e){lastError=e;if(attempt===0&&(/HTML|응답 형식|Failed to fetch|NetworkError/i.test(e.message)||e.name==='TypeError')){await new Promise(resolve=>setTimeout(resolve,500));continue}throw e}
+ }
+ throw lastError;
 }
 async function syncData(){
  if(!CONFIG.API_URL){setStatus('Apps Script URL 설정 필요','err');return}if(syncPromise)return syncPromise;
@@ -200,7 +211,7 @@ function loginStatus(message,isError=false){const el=$('#loginStatus');if(el){el
 async function handleGoogleCredential(response){
  auth.idToken=response.credential||'';loginStatus('계정과 사용 권한을 확인하고 있습니다…');
  try{
-  const r=await fetch(CONFIG.API_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=utf-8'},body:JSON.stringify({action:'authStatus',idToken:auth.idToken}),signal:AbortSignal.timeout(CONFIG.SYNC_TIMEOUT_MS)}),j=await r.json();
+  const j=await apiPost('authStatus',{idToken:auth.idToken});
   if(j.status==='ADMIN'||j.status==='APPROVED'){auth.sessionToken=j.sessionToken||'';if(auth.sessionToken)localStorage.setItem('hyosan-session',auth.sessionToken);startApp(j.user);return}
   auth.idToken='';loginStatus(j.message||'관리자 승인을 기다리고 있습니다.',j.status==='REVOKED');
  }catch(e){auth.idToken='';loginStatus('로그인을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요. '+e.message,true)}
