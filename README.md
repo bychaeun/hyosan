@@ -27,7 +27,7 @@ ChatGPT 등 앱 내부 브라우저에서는 설치 메뉴가 제공되지 않�
 
 ## HYOSAN_LPM 시트 열
 
-- `SampleBook`: `SOLID_BOOK`, `CHART_COLLAB_2022`, `EXISTING_2021`, `NEW_2022` 중 하나
+- `SampleBook`: `SOLID_BOOK`, `SCHATT_COLLAB_`, `EXISTING_2021`, `NEW_2022` 중 하나
 - `Category`: `WOOD`, `SOLID`, `STONE`, `FABRIC`, `OTHER` 중 하나
 - `PaperNumber`: 팝업과 Slides의 `종이 넘버`에 표시
 - `BasePaperCompany`: 팝업에서 `종이 넘버` 옆의 `원지 회사명`으로 표시
@@ -39,7 +39,7 @@ ChatGPT 등 앱 내부 브라우저에서는 설치 메뉴가 제공되지 않�
 
 `CATEGORIES` 시트에서 아래 두 메뉴를 관리합니다.
 
-- `LPM_BOOK`: 샘플북 필터 (`전체`, `솔리드`, `샤트콜라보`, `기존`, `신규`)
+- `LPM_BOOK`: 샘플북 필터를 `Menu | Code | Label` 형식으로 관리합니다. 예: `LPM_BOOK | SCHATT_COLLAB_ | 샤트콜라보`
 - `LPM_CATEGORY`: 디자인 필터 (`전체`, `우드`, `솔리드`, `스톤 · 타일`, `패브릭 · 텍스처`, `기타`)
 
 ## 동기화와 모바일 로그인
@@ -63,3 +63,4 @@ Google Drive 이미지는 브라우저에서 원본 다운로드 주소로 바�
 ## Slides 내보내기 권한
 
 새 슬라이드는 Apps Script 실행 계정 소유로 생성됩니다. 관리자 본인의 내보내기는 별도 Drive 공유 호출 없이 열리고, 승인된 다른 사용자의 내보내기는 `drive.file` 범위로 생성 파일만 자동 공유합니다. 공유 권한이 일시적으로 실패해도 슬라이드 생성 결과는 유지됩니다.
+
