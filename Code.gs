@@ -198,16 +198,31 @@ function driveFileId_(value){
   return pathMatch?pathMatch[1]:queryMatch?decodeURIComponent(queryMatch[1]):'';
 }
 function imageBlob_(url){
-  const fileId=driveFileId_(url),blob=fileId?DriveApp.getFileById(fileId).getBlob():UrlFetchApp.fetch(url,{muteHttpExceptions:true}).getBlob();
+  const fileId=driveFileId_(url);
+  let blob;
+  if(fileId){
+    const file=DriveApp.getFileById(fileId);
+    // 원본 샘플 이미지는 25MP를 넘는 경우가 많아 Slides 삽입 한도를 초과한다.
+    // Drive가 생성한 축소 이미지를 우선 사용하면 비공개 파일 권한을 유지하면서 안정적으로 삽입된다.
+    blob=file.getThumbnail()||file.getBlob();
+  }else{
+    const response=UrlFetchApp.fetch(url,{followRedirects:true,muteHttpExceptions:true});
+    const status=response.getResponseCode();
+    if(status<200||status>=300)throw new Error('이미지 URL 응답 오류(HTTP '+status+')');
+    blob=response.getBlob();
+  }
   if(!blob||!/^image\//i.test(blob.getContentType()||''))throw new Error('이미지 형식이 아닙니다.');
   return /^image\/(?:png|jpeg|gif)$/i.test(blob.getContentType()||'')?blob:blob.getAs('image/png');
 }
 function insertSquareImage_(slide,url,x,y,size){
-  if(!url)return false;
+  if(!url)throw new Error('시트에 이미지 URL이 없습니다.');
   try{
     const blob=imageBlob_(url),image=slide.insertImage(blob);
     image.setLeft(x).setTop(y).setWidth(size).setHeight(size).replace(blob,true);return true;
-  }catch(err){console.error('Slides image insert failed: '+err.message);return false}
+  }catch(err){
+    console.error('Slides image insert failed: '+err.message);
+    throw new Error('슬라이드 이미지 삽입 실패: '+err.message);
+  }
 }
 function jsonOutput(obj){return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON)}
 
