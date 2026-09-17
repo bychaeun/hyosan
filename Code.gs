@@ -160,8 +160,8 @@ function exportToSlides_(lpmId,requesterEmail){
   if(cfg.SLIDES_DESTINATION_ID){pres=SlidesApp.openById(cfg.SLIDES_DESTINATION_ID)}else{pres=SlidesApp.create('HYOSAN LPM Export - '+item.ProductName)}
   const slide=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK),W=pres.getPageWidth(),H=pres.getPageHeight();
   slide.insertShape(SlidesApp.ShapeType.RECTANGLE,0,0,W,H).getFill().setSolidFill('#F5F3EE');
-  const slideImage=firstImageUrl_(item.ImageURL||item.PreviewImageURL);
-  const imageInserted=insertSlideImage_(slide,slideImage,0,0,W*.58,H);
+  const slideImage=firstImageUrl_(item.ImageURL||item.PreviewImageURL),imageSize=Math.min(H,W*.58);
+  const imageInserted=insertSquareImage_(slide,slideImage,0,(H-imageSize)/2,imageSize);
   const x=W*.62,w=W*.32;
   addText_(slide,item.ProductName||'',x,H*.12,w,40,15,true);
   addText_(slide,'종이 넘버',x,H*.23,w,18,11,true);addText_(slide,item.PaperNumber||item.PaperNo||item.PatternForm||'-',x,H*.28,w,24,8,false);
@@ -197,15 +197,17 @@ function driveFileId_(value){
   const pathMatch=text.match(/\/file\/d\/([^/?#]+)/),queryMatch=text.match(/[?&]id=([^&#]+)/);
   return pathMatch?pathMatch[1]:queryMatch?decodeURIComponent(queryMatch[1]):'';
 }
-function insertSlideImage_(slide,url,x,y,w,h){
+function imageBlob_(url){
+  const fileId=driveFileId_(url),blob=fileId?DriveApp.getFileById(fileId).getBlob():UrlFetchApp.fetch(url,{muteHttpExceptions:true}).getBlob();
+  if(!blob||!/^image\//i.test(blob.getContentType()||''))throw new Error('이미지 형식이 아닙니다.');
+  return /^image\/(?:png|jpeg|gif)$/i.test(blob.getContentType()||'')?blob:blob.getAs('image/png');
+}
+function insertSquareImage_(slide,url,x,y,size){
   if(!url)return false;
   try{
-    const fileId=driveFileId_(url),blob=fileId?DriveApp.getFileById(fileId).getBlob():UrlFetchApp.fetch(url,{muteHttpExceptions:true}).getBlob();
-    if(!blob||!/^image\//i.test(blob.getContentType()||''))throw new Error('이미지 형식이 아닙니다.');
-    slide.insertImage(blob,x,y,w,h);return true;
-  }catch(err){
-    try{slide.insertImage(url,x,y,w,h);return true}catch(fallbackError){return false}
-  }
+    const blob=imageBlob_(url),image=slide.insertImage(blob);
+    image.setLeft(x).setTop(y).setWidth(size).setHeight(size).replace(blob,true);return true;
+  }catch(err){console.error('Slides image insert failed: '+err.message);return false}
 }
 function jsonOutput(obj){return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON)}
 
