@@ -161,7 +161,7 @@ function exportToSlides_(lpmId,requesterEmail){
   const slide=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK),W=pres.getPageWidth(),H=pres.getPageHeight();
   slide.insertShape(SlidesApp.ShapeType.RECTANGLE,0,0,W,H).getFill().setSolidFill('#F5F3EE');
   const slideImage=firstImageUrl_(item.ImageURL||item.PreviewImageURL);
-  if(slideImage){try{slide.insertImage(slideImage,0,0,W*.58,H)}catch(e){}}
+  const imageInserted=insertSlideImage_(slide,slideImage,0,0,W*.58,H);
   const x=W*.62,w=W*.32;
   addText_(slide,item.ProductName||'',x,H*.12,w,40,15,true);
   addText_(slide,'종이 넘버',x,H*.23,w,18,11,true);addText_(slide,item.PaperNumber||item.PaperNo||item.PatternForm||'-',x,H*.28,w,24,8,false);
@@ -170,7 +170,7 @@ function exportToSlides_(lpmId,requesterEmail){
   addText_(slide,'용도',x,H*.71,w,18,11,true);addText_(slide,item.Applications||'-',x,H*.76,w,44,8,false);
   if(pres.getSlides().length>1&&!cfg.SLIDES_DESTINATION_ID)pres.getSlides()[0].remove();
   const sharing=sharePresentation_(pres.getId(),requesterEmail,cfg);
-  return {ok:true,presentationId:pres.getId(),url:pres.getUrl(),sharedWith:sharing.shared?requesterEmail:'',shareWarning:sharing.warning||''};
+  return {ok:true,presentationId:pres.getId(),url:pres.getUrl(),imageInserted:imageInserted,sharedWith:sharing.shared?requesterEmail:'',shareWarning:sharing.warning||''};
 }
 
 function sharePresentation_(presentationId,requesterEmail,cfg){
@@ -191,4 +191,21 @@ function addText_(slide,text,x,y,w,h,size,bold){
 }
 
 function firstImageUrl_(value){return String(value||'').split(/[\r\n,;|]+/).map(v=>v.trim()).find(v=>/^https?:\/\//i.test(v))||''}
+function driveFileId_(value){
+  const text=String(value||'').trim();
+  if(!/^https:\/\/(?:[^/]+\.)?(?:drive\.google\.com|drive\.usercontent\.google\.com)\//i.test(text))return '';
+  const pathMatch=text.match(/\/file\/d\/([^/?#]+)/),queryMatch=text.match(/[?&]id=([^&#]+)/);
+  return pathMatch?pathMatch[1]:queryMatch?decodeURIComponent(queryMatch[1]):'';
+}
+function insertSlideImage_(slide,url,x,y,w,h){
+  if(!url)return false;
+  try{
+    const fileId=driveFileId_(url),blob=fileId?DriveApp.getFileById(fileId).getBlob():UrlFetchApp.fetch(url,{muteHttpExceptions:true}).getBlob();
+    if(!blob||!/^image\//i.test(blob.getContentType()||''))throw new Error('이미지 형식이 아닙니다.');
+    slide.insertImage(blob,x,y,w,h);return true;
+  }catch(err){
+    try{slide.insertImage(url,x,y,w,h);return true}catch(fallbackError){return false}
+  }
+}
 function jsonOutput(obj){return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON)}
+
