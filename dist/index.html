@@ -54,7 +54,7 @@ html,body{overscroll-behavior-y:none}html{height:100%}body{min-height:100%}.pick
 <p id="loginStatus" class="login-status" role="status"></p>
 </div></section>
 <div class="app"><aside><div class="brand">HYOSAN<br>LPM Library<small>LIVE · Google Sheets Sync</small></div><div class="nav"><button class="active" data-page="patterns">패턴 디자인</button><button data-page="lpm">효산 LPM 디자인</button><button data-page="emboss">경면판</button><button data-page="colorist">컬러리스트</button></div></aside>
-<main><div class="top"><div><h1 id="pageTitle">패턴 디자인</h1><div id="syncStatus" class="status">데이터 연결 대기</div></div><div class="tools"><input id="search" placeholder="이름 / 분류 검색"><button class="btn ghost" id="reload">지금 동기화</button><button class="btn ghost" onclick="printCatalog()">PDF 저장</button><button class="btn ghost" id="installButton">앱 설치</button><button class="btn ghost" id="userAdminButton" hidden>사용자 관리</button><button class="btn ghost" id="logoutButton" hidden>로그아웃</button></div></div>
+<main><div class="top"><div><h1 id="pageTitle">패턴 디자인</h1><div id="syncStatus" class="status">데이터 연결 대기</div></div><div class="tools"><input id="search" placeholder="이름 / 분류 검색"><button class="btn ghost" id="reload">지금 동기화</button><button class="btn ghost" id="printButton">PDF 저장</button><button class="btn ghost" id="installButton">앱 설치</button><button class="btn ghost" id="userAdminButton" hidden>사용자 관리</button><button class="btn ghost" id="logoutButton" hidden>로그아웃</button></div></div>
 <section id="patterns" class="page active"><div class="tabs" id="patternTabs"></div><div class="grid" id="patternGrid"></div><div class="pager" id="patternPager"></div></section>
 <section id="lpm" class="page"><div class="filter-group"><div class="filter-row"><div class="filter-title">샘플북</div><div class="tabs" id="lpmBookTabs"></div></div><div class="filter-row"><div class="filter-title">디자인</div><div class="tabs" id="lpmTabs"></div></div></div><p class="muted" style="font-size:11px;line-height:1.5;margin:0 0 10px">모니터 화면과 실제 샘플의 색상은 다를 수 있으니 실물을 확인해 주세요.</p><div class="grid" id="lpmGrid"></div><div class="pager" id="lpmPager"></div></section>
 <section id="emboss" class="page"><div class="grid" id="embossGrid"></div><div class="pager" id="embossPager"></div></section>
@@ -157,7 +157,7 @@ async function exportSlide(id){
  const popup=window.open('about:blank','_blank');if(popup)popup.opener=null;
  try{
   const j=await apiPost('exportToSlides',{lpmId:id},CONFIG.EXPORT_TIMEOUT_MS);
-  const url=slidesLink(j);actionStatus(j.shareWarning?'Google Slides가 생성되었습니다. '+j.shareWarning:'Google Slides가 생성되었습니다.');const link=document.createElement('a');link.href=url;link.target='_blank';link.rel='noopener';link.textContent=' Google Slides 열기';$('#actionStatus').appendChild(link);if(popup)popup.location.href=url;
+  const url=slidesLink(j),message=j.imageInserted===false?'Google Slides는 생성됐지만 이미지를 추가하지 못했습니다. 이미지 URL 또는 Drive 권한을 확인해 주세요.':j.shareWarning?'Google Slides가 생성되었습니다. '+j.shareWarning:'Google Slides가 생성되었습니다.';actionStatus(message);const link=document.createElement('a');link.href=url;link.target='_blank';link.rel='noopener';link.textContent=' Google Slides 열기';$('#actionStatus').appendChild(link);if(popup)popup.location.href=url;
  }catch(e){if(popup)popup.close();actionStatus('Slides 내보내기 실패: '+e.message)}finally{exporting=false}
 }
 async function downloadCurrentImage(button){
@@ -236,7 +236,7 @@ async function installApp(){
 }
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e});window.addEventListener('appinstalled',()=>{installPrompt=null});
 $('#installButton').textContent=isMobileDevice()?'모바일 앱 설치':'웹 앱 설치';
-$('#installButton').onclick=installApp;$('#userAdminButton').onclick=showUserAdmin;$('#logoutButton').onclick=logout;bootstrapAccess();
+$('#printButton').onclick=()=>{if(isMobileDevice()){showInstallHelp('PDF 저장은 웹(PC)에서만 이용할 수 있습니다.');return}printCatalog()};$('#installButton').onclick=installApp;$('#userAdminButton').onclick=showUserAdmin;$('#logoutButton').onclick=logout;bootstrapAccess();
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 </script>
 </body></html>
