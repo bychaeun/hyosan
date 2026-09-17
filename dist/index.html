@@ -65,7 +65,7 @@ html,body{overscroll-behavior-y:none}html{height:100%}body{min-height:100%}.pick
 <dialog id="userDialog"><div id="userDialogContent" class="user-admin"></div></dialog>
 <dialog id="installDialog" class="install-dialog"><div class="install-dialog-body"><div class="modal-head"><h1>앱 설치</h1><button class="close" onclick="installDialog.close()" aria-label="닫기">×</button></div><p id="installHelp" class="value"></p><div class="actions"><button class="btn" onclick="installDialog.close()">확인</button></div></div></dialog>
 <script>
-const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbyK5p0UQ2azzwv0Vy5rXyNSZTl-OU3CBt4YPqB_hnHMycII_qR4vb9tqWSWQeZ5qNLA/exec',SYNC_MS:1800000,SYNC_TIMEOUT_MS:30000,EXPORT_TIMEOUT_MS:120000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:5};
+const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbxZP88WUP-WPuNIUH51C2V1zZ3DHQEKugDB-VcypCZ8Dg0a2PSXJ1c2tWiiw5K9Yl1t/exec',SYNC_MS:1800000,SYNC_TIMEOUT_MS:30000,EXPORT_TIMEOUT_MS:120000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:5};
 let db={patterns:[],lpm:[],emboss:[],categories:[],config:{}},state={patternCat:'ALL',lpmBook:'ALL',lpmCat:'ALL',pPage:1,lPage:1,ePage:1,selectedHex:'#B3B3B3',wheelPoint:{h:0,ratio:0},modalImages:[],modalIndex:0,modalTitle:''},syncPromise=null,lastPayloadText='',appStarted=false,syncTimer=null;
 let indexes={patterns:new Map(),lpm:new Map(),emboss:new Map(),embossToLpm:new Map(),lpmBookLabels:new Map(),colors:[]},searchIndex=new WeakMap(),installPrompt=null;
 const auth={required:false,clientId:'',idToken:'',sessionToken:localStorage.getItem('hyosan-session')||'',user:null};
