@@ -1,5 +1,5 @@
 const SPREADSHEET_ID='1RC-6ibPA86zaWOGt1rzgmQf9tLpT4OcgdI6K9XcUPTI';
-const SHEET_NAMES={patterns:'PATTERN_DESIGN',lpm:'HYOSAN_LPM',emboss:'EMBOSS_PLATE',sites:'CONSTRUCTION_SITES',config:'CONFIG',users:'APP_USERS'};
+const SHEET_NAMES={patterns:'PATTERN_DESIGN',lpm:'HYOSAN_LPM',specialSpecs:'SPECIAL_SPECS',emboss:'EMBOSS_PLATE',sites:'CONSTRUCTION_SITES',config:'CONFIG',users:'APP_USERS'};
 const USER_HEADERS=['Email','Name','PictureURL','Status','RequestedAt','LastLoginAt','ApprovedBy','ApprovedAt'];
 
 function doGet(e){
@@ -129,10 +129,10 @@ function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
 function getAllData_(){
-  const cache=CacheService.getScriptCache(),cacheKey='library-data-v2',cached=cache.get(cacheKey);
+  const cache=CacheService.getScriptCache(),cacheKey='library-data-v3',cached=cache.get(cacheKey);
   if(cached){try{return JSON.parse(cached)}catch(e){}}
   const ss=SpreadsheetApp.openById(SPREADSHEET_ID);
-  const out={patterns:readSheet_(ss,SHEET_NAMES.patterns),lpm:readSheet_(ss,SHEET_NAMES.lpm),emboss:readSheet_(ss,SHEET_NAMES.emboss),sites:readSheet_(ss,SHEET_NAMES.sites),config:{}};
+  const out={patterns:readSheet_(ss,SHEET_NAMES.patterns),lpm:readSheet_(ss,SHEET_NAMES.lpm),specialSpecs:readSheet_(ss,SHEET_NAMES.specialSpecs),emboss:readSheet_(ss,SHEET_NAMES.emboss),sites:readSheet_(ss,SHEET_NAMES.sites),config:{}};
   const publicConfig=['LIBRARY_TITLE','SYNC_INTERVAL_SECONDS','COLOR_TOLERANCE_PERCENT','VERSION'];
   readSheet_(ss,SHEET_NAMES.config).forEach(r=>{if(publicConfig.includes(r.KEY))out.config[r.KEY]=r.VALUE});
   readSheet_(ss,'RELATIONS').forEach(r=>{
