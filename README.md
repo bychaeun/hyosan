@@ -27,8 +27,8 @@ ChatGPT 등 앱 내부 브라우저에서는 설치 메뉴가 제공되지 않�
 
 ## HYOSAN_LPM 시트 열
 
-- `SampleBook`: `SOLID_BOOK`, `SCHATT_COLLAB_`, `EXISTING_2021`, `NEW_2022` 중 하나
-- `Category`: `WOOD`, `SOLID`, `STONE`, `FABRIC`, `OTHER` 중 하나
+- `SampleBook`: 샘플북 이름. 입력된 값으로 샘플북 필터가 자동 생성됩니다.
+- `Category`: 디자인 분류 이름. 입력된 값으로 디자인 필터가 자동 생성됩니다.
 - `PaperNumber`: 팝업과 Slides의 `종이 넘버`에 표시
 - `BasePaperCompany`: 팝업에서 `종이 넘버` 옆의 `원지 회사명`으로 표시
 - `PreviousNames`: 제품명이 바뀌기 전에 쓰이던 이전 이름들 (쉼표로 구분). 값이 있으면 팝업의 제품명 바로 아래에 "이전 제품명: ..."으로 표시되고, 검색에도 포함됩니다. 비워두면 표시 안 됨
@@ -37,10 +37,9 @@ ChatGPT 등 앱 내부 브라우저에서는 설치 메뉴가 제공되지 않�
 
 ## LPM 필터 관리
 
-`CATEGORIES` 시트에서 아래 두 메뉴를 관리합니다.
+효산 LPM의 샘플북 및 디자인 필터는 `HYOSAN_LPM` 시트의 `SampleBook`, `Category` 값을 기준으로 자동 생성됩니다. 새 분류를 추가할 때 `CATEGORIES` 시트나 프로그램 코드를 별도로 수정할 필요가 없습니다.
 
-- `LPM_BOOK`: 샘플북 필터를 `Menu | Code | Label` 형식으로 관리합니다. 예: `LPM_BOOK | SCHATT_COLLAB_ | 샤트콜라보`
-- `LPM_CATEGORY`: 디자인 필터 (`전체`, `우드`, `솔리드`, `스톤 · 타일`, `패브릭 · 텍스처`, `기타`)
+기존 `CATEGORIES` 시트의 `LPM_BOOK`, `LPM_CATEGORY` 행은 현재 데이터의 표시 이름을 유지하기 위한 선택 항목이며, 새 분류에는 입력하지 않아도 됩니다.
 
 ## 경면판 표시 여부
 
