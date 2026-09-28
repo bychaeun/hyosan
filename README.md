@@ -55,8 +55,8 @@ ChatGPT 등 앱 내부 브라우저에서는 설치 메뉴가 제공되지 않�
 - `Construction_ID`: 각 현장의 고유 ID
 - `Company`: 건설사명. 이 값으로 사이트 필터가 자동 생성됩니다.
 - `SiteName`: 현장명
-- `SpecialSpecNumbers`: 건설사 화면에 표시할 특판번호입니다. 여러 개는 줄바꿈으로 구분합니다.
-- `LinkedSpecialSpec_IDs`: 각 특판번호가 연결될 `SPECIAL_SPECS`의 `SpecialSpec_ID`입니다. `SpecialSpecNumbers`와 같은 순서로 줄바꿈해 입력하며 화면에는 표시되지 않습니다.
+- `SpecialSpecNumbers`: 건설사 화면에 표시할 특별넘버입니다. 여러 개는 줄바꿈으로 구분합니다.
+- `LinkedSpecialSpec_IDs`: 각 특별넘버가 연결될 `SPECIAL_SPECS`의 `SpecialSpec_ID`입니다. `SpecialSpecNumbers`와 같은 순서로 줄바꿈해 입력하며 화면에는 표시되지 않습니다.
 - `ImageURL`: 이미지 URL. 여러 장은 셀 안에서 줄바꿈으로 구분합니다.
 - `MHOpenDate`: 모델하우스 오픈일
 - `CompletionDate`: 완공일
@@ -66,22 +66,22 @@ ChatGPT 등 앱 내부 브라우저에서는 설치 메뉴가 제공되지 않�
 
 건설사 현장 팝업에는 종이번호·실제 제품번호·별도 경면 항목을 노출하지 않고, 괄호 안 경면 정보까지 포함된 적용 스펙만 표시합니다. 적용 스펙 버튼은 같은 줄 순서의 `LinkedSpecialSpec_IDs`를 이용합니다.
 
-## 특판번호 관리
+## 특별넘버 관리
 
-`SPECIAL_SPECS` 시트에서 특판번호를 별도로 관리합니다.
+`SPECIAL_SPECS` 시트에서 특별넘버를 별도로 관리합니다.
 
-- `SpecialSpec_ID`: 변경하지 않는 특판 고유 ID
-- `SpecialSpecNumber`: 괄호 안 경면 정보까지 포함한 전체 특판번호
-- `MajorCategory`: 특판 대분류. 입력한 값이 대분류 필터로 자동 생성됩니다.
+- `SpecialSpec_ID`: 변경하지 않는 특별넘버 고유 ID
+- `SpecialSpecNumber`: 괄호 안 경면 정보까지 포함한 전체 특별넘버
+- `MajorCategory`: 특별넘버 대분류. 입력한 값이 대분류 필터로 자동 생성됩니다.
 - `SubCategory`: 선택한 대분류 안의 소분류. 입력한 값이 소분류 필터로 자동 생성됩니다.
 - `PaperNumber`: 종이 넘버
 - `EmbossType`: 경면 종류
-- `Content`: 특판 설명. 내용 안에 `LPM-806`처럼 LPM ID를 입력하면 해당 제품 팝업으로 이동하는 버튼으로 표시됩니다.
+- `Content`: 특별넘버 설명. 내용 안에 `LPM-806`처럼 LPM ID를 입력하면 해당 제품 팝업으로 이동하는 버튼으로 표시됩니다.
 - `LinkedLPM_ID`: 기존 데이터 호환용 연결 ID입니다. 새 데이터는 필요하면 `Content`에 LPM ID를 입력하면 됩니다.
-- `ImageURL`: 특판 전용 이미지 URL. 여러 장은 셀 안에서 줄바꿈으로 구분합니다.
+- `ImageURL`: 특별넘버 전용 이미지 URL. 여러 장은 셀 안에서 줄바꿈으로 구분합니다.
 - `Active`: `TRUE`면 표시, `FALSE`면 숨김
 
-`특판`은 효산 LPM과 분리된 상단 메뉴로 표시됩니다. `MajorCategory`와 `SubCategory`에 새로운 분류명을 입력하면 대분류와 소분류 필터가 자동 생성되므로 코드 수정은 필요하지 않습니다. 빈 분류는 `미분류`로 표시됩니다.
+`특별넘버`는 효산 LPM과 분리된 상단 메뉴로 표시됩니다. `MajorCategory`와 `SubCategory`에 새로운 분류명을 입력하면 대분류와 소분류 필터가 자동 생성되므로 코드 수정은 필요하지 않습니다. 빈 분류는 `미분류`로 표시됩니다.
 
 ## 동기화와 모바일 로그인
 
