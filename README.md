@@ -55,7 +55,8 @@ ChatGPT 등 앱 내부 브라우저에서는 설치 메뉴가 제공되지 않�
 - `Construction_ID`: 각 현장의 고유 ID
 - `Company`: 건설사명. 이 값으로 사이트 필터가 자동 생성됩니다.
 - `SiteName`: 현장명
-- `AppliedSpecs`: 적용 스펙. `LPM_ID`, 제품명 또는 종이 넘버를 입력하면 해당 효산 LPM 상세창으로 연결됩니다. 여러 개는 줄바꿈으로 구분합니다.
+- `SampleNumbers`: 샘플 넘버. `LPM_ID`, 제품명 또는 종이 넘버를 입력하면 해당 효산 LPM 상세창으로 연결됩니다. 여러 개는 줄바꿈으로 구분합니다.
+- `EmbossCodes`: 경면 코드. `EmbossPlate_ID`, `PlateCode` 또는 경면판 이름을 입력하면 해당 경면판 상세창으로 연결됩니다. 여러 개는 줄바꿈으로 구분합니다.
 - `ImageURL`: 이미지 URL. 여러 장은 셀 안에서 줄바꿈으로 구분합니다.
 - `MHOpenDate`: 모델하우스 오픈일
 - `CompletionDate`: 완공일
