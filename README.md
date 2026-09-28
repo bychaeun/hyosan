@@ -39,7 +39,7 @@ ChatGPT 등 앱 내부 브라우저에서는 설치 메뉴가 제공되지 않�
 
 효산 LPM의 샘플북 및 디자인 필터는 `HYOSAN_LPM` 시트의 `SampleBook`, `Category` 값을 기준으로 자동 생성됩니다. 새 분류를 추가할 때 `CATEGORIES` 시트나 프로그램 코드를 별도로 수정할 필요가 없습니다.
 
-기존 `CATEGORIES` 시트의 `LPM_BOOK`, `LPM_CATEGORY` 행은 현재 데이터의 표시 이름을 유지하기 위한 선택 항목이며, 새 분류에는 입력하지 않아도 됩니다.
+패턴 디자인 필터도 `PATTERN_DESIGN` 시트의 `PrimaryCategory` 값을 기준으로 자동 생성됩니다. 별도의 `CATEGORIES` 시트는 사용하지 않습니다.
 
 ## 경면판 표시 여부
 
