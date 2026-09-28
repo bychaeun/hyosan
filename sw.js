@@ -1,4 +1,4 @@
-const CACHE_NAME='hyosan-lpl-v12';
+const CACHE_NAME='hyosan-lpl-v13';
 const APP_SHELL=['./','./index.html','./manifest.webmanifest','./mobile.webmanifest','./assets/hyosan-app-icon.svg','./assets/hyosan-lpl-logo-full.svg','./assets/hyosan-app-icon-192.png','./assets/hyosan-app-icon-512.png'];
 
 self.addEventListener('install',event=>{
@@ -20,4 +20,3 @@ self.addEventListener('fetch',event=>{
   }
   event.respondWith(caches.match(request).then(cached=>cached||fetch(request).then(response=>{if(response.ok){const copy=response.clone();caches.open(CACHE_NAME).then(cache=>cache.put(request,copy))}return response})));
 });
-
