@@ -39,7 +39,7 @@ function getConfig_(){
   if(cached){try{return JSON.parse(cached)}catch(e){}}
   const ss=SpreadsheetApp.openById(SPREADSHEET_ID),cfg={};
   readSheet_(ss,SHEET_NAMES.config).forEach(r=>{if(r.KEY)cfg[r.KEY]=r.VALUE});
-  try{cache.put(key,JSON.stringify(cfg),60)}catch(e){}
+  try{cache.put(key,JSON.stringify(cfg),300)}catch(e){}
   return cfg;
 }
 
@@ -63,8 +63,18 @@ function verifySessionToken_(token){
 
 function getSessionSecret_(){const props=PropertiesService.getScriptProperties();let secret=props.getProperty('SESSION_SECRET');if(!secret){secret=Utilities.getUuid()+Utilities.getUuid();props.setProperty('SESSION_SECRET',secret)}return secret}
 
+const USER_CACHE_KEY='app-users-v1';
+function readUsers_(){
+  const cache=CacheService.getScriptCache(),cached=cache.get(USER_CACHE_KEY);
+  if(cached){try{return JSON.parse(cached)}catch(e){}}
+  const rows=readSheet_(SpreadsheetApp.openById(SPREADSHEET_ID),SHEET_NAMES.users);
+  try{cache.put(USER_CACHE_KEY,JSON.stringify(rows),30)}catch(e){}
+  return rows;
+}
+function clearUserCache_(){try{CacheService.getScriptCache().remove(USER_CACHE_KEY)}catch(e){}}
+
 function getUserByEmail_(email){
-  const rows=readSheet_(SpreadsheetApp.openById(SPREADSHEET_ID),SHEET_NAMES.users),user=rows.find(r=>String(r.Email||'').toLowerCase()===String(email||'').toLowerCase());if(!user)throw appError_('사용자를 찾을 수 없습니다.','USER_NOT_FOUND');return user;
+  const user=readUsers_().find(r=>String(r.Email||'').toLowerCase()===String(email||'').toLowerCase());if(!user)throw appError_('사용자를 찾을 수 없습니다.','USER_NOT_FOUND');return user;
 }
 
 function verifyGoogleToken_(idToken,cfg){
@@ -96,6 +106,7 @@ function touchUser_(identity,cfg){
       if(email===adminEmail)row.Status='ADMIN';
       sh.getRange(rowIndex,2,1,5).setValues([[row.Name,row.PictureURL,row.Status,row.RequestedAt||now,row.LastLoginAt]]);
     }
+    clearUserCache_();
     return row;
   }finally{lock.releaseLock()}
 }
@@ -108,11 +119,11 @@ function getUserSheet_(ss){
 
 function userResponse_(user){
   const status=user.Status||'PENDING';
-  return {ok:status==='ADMIN'||status==='APPROVED',status:status,user:{email:user.Email,name:user.Name,picture:user.PictureURL,isAdmin:status==='ADMIN'},message:status==='PENDING'?'관리자 승인을 기다리고 있습니다.':status==='REVOKED'?'관리자가 사용 권한을 중지했습니다.':''};
+  return {ok:status==='ADMIN'||status==='APPROVED',code:status==='PENDING'?'APPROVAL_PENDING':status==='REVOKED'?'ACCESS_REVOKED':'',status:status,user:{email:user.Email,name:user.Name,picture:user.PictureURL,isAdmin:status==='ADMIN'},message:status==='PENDING'?'관리자 승인을 기다리고 있습니다.':status==='REVOKED'?'관리자가 사용 권한을 중지했습니다.':''};
 }
 
 function listUsers_(admin){
-  assertAdmin_(admin);const rows=readSheet_(SpreadsheetApp.openById(SPREADSHEET_ID),SHEET_NAMES.users);
+  assertAdmin_(admin);const rows=readUsers_();
   return {ok:true,users:rows.map(r=>({email:r.Email,name:r.Name,picture:r.PictureURL,status:r.Status,requestedAt:r.RequestedAt,lastLoginAt:r.LastLoginAt,approvedBy:r.ApprovedBy,approvedAt:r.ApprovedAt}))};
 }
 
@@ -121,7 +132,7 @@ function setUserStatus_(admin,email,status){
   if(!email||!['APPROVED','REVOKED'].includes(status))throw appError_('사용자 또는 상태 값이 올바르지 않습니다.','INVALID_USER_UPDATE');
   if(email===String(admin.Email||'').toLowerCase())throw appError_('관리자 본인의 권한은 변경할 수 없습니다.','ADMIN_PROTECTED');
   const ss=SpreadsheetApp.openById(SPREADSHEET_ID),sh=getUserSheet_(ss),values=sh.getDataRange().getDisplayValues(),now=new Date().toISOString();
-  for(let i=1;i<values.length;i++)if(String(values[i][0]||'').toLowerCase()===email){sh.getRange(i+1,4).setValue(status);sh.getRange(i+1,7,1,2).setValues([[admin.Email,now]]);return {ok:true,email:email,status:status}}
+  for(let i=1;i<values.length;i++)if(String(values[i][0]||'').toLowerCase()===email){sh.getRange(i+1,4).setValue(status);sh.getRange(i+1,7,1,2).setValues([[admin.Email,now]]);clearUserCache_();return {ok:true,email:email,status:status}}
   throw appError_('사용자를 찾을 수 없습니다.','USER_NOT_FOUND');
 }
 
