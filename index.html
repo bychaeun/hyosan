@@ -288,7 +288,7 @@ async function bootstrapAccess(){
     if(session.status==='ADMIN'||session.status==='APPROVED'){startApp(session.user);return}
     if(session.status==='PENDING'||session.status==='REVOKED')clearSession()
    }catch(error){
-    if(['INVALID_SESSION','USER_NOT_FOUND','AUTH_REQUIRED'].includes(error.code))clearSession();
+    if(['INVALID_SESSION','USER_NOT_FOUND','AUTH_REQUIRED','APPROVAL_PENDING','ACCESS_REVOKED'].includes(error.code))clearSession();
     else{retryAccessGate('로그인 서버의 응답이 지연되고 있습니다. 로그인 상태는 유지됩니다.');return}
    }
   }
