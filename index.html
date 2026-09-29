@@ -69,11 +69,12 @@ html,body{overscroll-behavior-y:none}html{height:100%}body{min-height:100%}.pick
 <dialog id="userDialog" hidden aria-hidden="true"><div id="userDialogContent" class="user-admin"></div></dialog>
 <dialog id="installDialog" class="install-dialog"><div class="install-dialog-body"><div class="modal-head"><h1>앱 설치</h1><button class="close" onclick="installDialog.close()" aria-label="닫기">×</button></div><p id="installHelp" class="value"></p><div class="actions"><button class="btn" onclick="installDialog.close()">확인</button></div></div></dialog>
 <script>
-const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbxZP88WUP-WPuNIUH51C2V1zZ3DHQEKugDB-VcypCZ8Dg0a2PSXJ1c2tWiiw5K9Yl1t/exec',SYNC_MS:1800000,SYNC_TIMEOUT_MS:30000,EXPORT_TIMEOUT_MS:120000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:10};
+const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbxZP88WUP-WPuNIUH51C2V1zZ3DHQEKugDB-VcypCZ8Dg0a2PSXJ1c2tWiiw5K9Yl1t/exec',SYNC_MS:1800000,SYNC_TIMEOUT_MS:30000,AUTH_TIMEOUT_MS:16000,EXPORT_TIMEOUT_MS:120000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:10};
 const DATA_KEYS=['patterns','lpm','specialSpecs','emboss','sites'];
 let db={patterns:[],lpm:[],specialSpecs:[],emboss:[],sites:[],config:{}},state={patternCat:'ALL',lpmBook:'ALL',lpmCat:'ALL',specialMajor:'ALL',specialSub:'ALL',siteCompany:'ALL',pPage:1,lPage:1,sPage:1,ePage:1,cPage:1,selectedHex:'#B3B3B3',wheelPoint:{h:0,ratio:0},modalImages:[],modalIndex:0,modalTitle:'',modalHistory:[],modalView:null},syncPromise=null,lastPayloadText='',appStarted=false,syncTimer=null;
 let indexes={patterns:new Map(),lpm:new Map(),specialSpecs:new Map(),emboss:new Map(),embossToLpm:new Map(),colors:[]},searchIndex=new WeakMap(),imageListCache=new Map(),installPrompt=null;
 const auth={required:false,clientId:'',idToken:'',sessionToken:localStorage.getItem('hyosan-session')||'',user:null};
+let accessPromise=null;
 const $=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)],split=v=>String(v||'').split(',').map(x=>x.trim()).filter(Boolean);
 let cacheDbPromise;
 const cacheDb=()=>cacheDbPromise||(cacheDbPromise=new Promise((resolve,reject)=>{const request=indexedDB.open('hyosan-library',1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('data'))request.result.createObjectStore('data')};request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)}).catch(error=>{cacheDbPromise=null;throw error}));
@@ -98,17 +99,29 @@ function triggerImageDownload(url,name){const link=document.createElement('a');l
 function setStatus(t,kind=''){const e=$('#syncStatus');e.textContent=t;e.className='status '+kind}
 async function responseJson(r){
  const text=await r.text();
- if(!r.ok)throw new Error('HTTP '+r.status);
+ if(!r.ok){const error=new Error('HTTP '+r.status);error.status=r.status;throw error}
  try{return JSON.parse(text)}catch(e){throw new Error(/^\s*</.test(text)?'로그인 서버가 임시 HTML 응답을 반환했습니다.':'로그인 서버 응답 형식을 확인할 수 없습니다.')}
 }
+function apiFailure(data){const error=new Error(data.error||'요청에 실패했습니다.');error.code=data.code||'';return error}
+function isTransientError(error){return error.name==='TimeoutError'||error.name==='TypeError'||error.status===429||error.status>=500||/HTML|응답 형식|Failed to fetch|NetworkError|Load failed|시간/i.test(error.message)}
 async function apiPost(action,extra={},timeoutMs=CONFIG.SYNC_TIMEOUT_MS){
  const body={action,...extra};if(auth.sessionToken)body.sessionToken=auth.sessionToken;else if(auth.idToken)body.idToken=auth.idToken;
  let lastError;
  for(let attempt=0;attempt<2;attempt++){
   try{
    const r=await fetch(CONFIG.API_URL+'?ts='+Date.now(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8','Accept':'application/json'},body:JSON.stringify(body),cache:'no-store',redirect:'follow',signal:AbortSignal.timeout(timeoutMs)});
-   const j=await responseJson(r);if(j.ok===false)throw new Error(j.error||'요청에 실패했습니다.');return j;
-  }catch(e){lastError=e;if(attempt===0&&(/HTML|응답 형식|Failed to fetch|NetworkError/i.test(e.message)||e.name==='TypeError')){await new Promise(resolve=>setTimeout(resolve,500));continue}throw e}
+   const j=await responseJson(r);if(j.ok===false)throw apiFailure(j);return j;
+  }catch(error){lastError=error;if(attempt===0&&isTransientError(error)){await new Promise(resolve=>setTimeout(resolve,600));continue}throw error}
+ }
+ throw lastError;
+}
+async function fetchAppConfig(){
+ let lastError;
+ for(let attempt=0;attempt<2;attempt++){
+  try{
+   const r=await fetch(CONFIG.API_URL+'?action=appConfig&ts='+Date.now(),{cache:'no-store',redirect:'follow',signal:AbortSignal.timeout(CONFIG.AUTH_TIMEOUT_MS)});
+   const j=await responseJson(r);if(j.ok===false)throw apiFailure(j);return j;
+  }catch(error){lastError=error;if(attempt===0&&isTransientError(error)){await new Promise(resolve=>setTimeout(resolve,600));continue}throw error}
  }
  throw lastError;
 }
@@ -260,10 +273,38 @@ function showGoogleGate(){
  const form=$('#accessForm');form.className='access-panel google-gate';form.innerHTML='<img class="access-logo" src="assets/hyosan-lpl-logo-full.svg" alt="HYOSAN LPL"><h1 id="accessTitle">HYOSAN LPM Library</h1><p class="login-help">회사에서 사용할 Google 계정으로 로그인해 주세요.<br>최초 로그인 후 관리자의 승인이 필요합니다.</p><div id="googleButton" class="google-button"></div><p id="loginStatus" class="login-status" role="status"></p>';
  const init=()=>{if(!(window.google&&google.accounts&&google.accounts.id)){setTimeout(init,150);return}google.accounts.id.initialize({client_id:auth.clientId,callback:handleGoogleCredential,auto_select:false});google.accounts.id.renderButton($('#googleButton'),{theme:'outline',size:'large',shape:'pill',text:'signin_with',locale:'ko',width:280})};init();
 }
+function clearSession(){auth.sessionToken='';localStorage.removeItem('hyosan-session')}
+function retryAccessGate(message){
+ const form=$('#accessForm');form.className='access-panel google-gate';form.innerHTML='<img class="access-logo" src="assets/hyosan-lpl-logo-full.svg" alt="HYOSAN LPL"><h1 id="accessTitle">HYOSAN LPM Library</h1><p class="login-help">'+esc(message)+'</p><button class="btn" id="retryAccess" type="button">다시 연결</button><p id="loginStatus" class="login-status" role="status"></p>';
+ $('#retryAccess').onclick=bootstrapAccess;
+}
 async function bootstrapAccess(){
- try{const r=await fetch(CONFIG.API_URL+'?action=appConfig&ts='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(10000)}),j=await r.json();auth.required=j.authRequired===true;auth.clientId=String(j.clientId||'');if(auth.required&&auth.clientId){if(auth.sessionToken){try{const session=await apiPost('sessionStatus');if(session.status==='ADMIN'||session.status==='APPROVED'){startApp(session.user);return}}catch(e){localStorage.removeItem('hyosan-session');auth.sessionToken=''}}showGoogleGate();return}}
- catch(e){loginStatus('로그인 서버에 연결하지 못했습니다. 잠시 후 새로고침해 주세요.',true);return}
- loginStatus('Google 로그인 설정을 확인할 수 없습니다. 관리자에게 문의해 주세요.',true);
+ if(accessPromise)return accessPromise;
+ accessPromise=(async()=>{
+  if(auth.sessionToken){
+   loginStatus('저장된 로그인 정보를 확인하고 있습니다…');
+   try{
+    const session=await apiPost('sessionStatus',{},CONFIG.AUTH_TIMEOUT_MS);
+    if(session.status==='ADMIN'||session.status==='APPROVED'){startApp(session.user);return}
+    if(session.status==='PENDING'||session.status==='REVOKED')clearSession()
+   }catch(error){
+    if(['INVALID_SESSION','USER_NOT_FOUND','AUTH_REQUIRED'].includes(error.code))clearSession();
+    else{retryAccessGate('로그인 서버의 응답이 지연되고 있습니다. 로그인 상태는 유지됩니다.');return}
+   }
+  }
+  let cached=null;
+  try{cached=JSON.parse(localStorage.getItem('hyosan-app-config')||'null')}catch(e){}
+  if(cached&&cached.clientId){auth.required=cached.authRequired===true;auth.clientId=String(cached.clientId);showGoogleGate()}
+  try{
+   const config=await fetchAppConfig();auth.required=config.authRequired===true;auth.clientId=String(config.clientId||'');
+   if(auth.clientId)localStorage.setItem('hyosan-app-config',JSON.stringify({authRequired:auth.required,clientId:auth.clientId}));
+   if(auth.required&&auth.clientId){showGoogleGate();return}
+   loginStatus('Google 로그인 설정을 확인할 수 없습니다. 관리자에게 문의해 주세요.',true);
+  }catch(error){
+   if(!cached)retryAccessGate('로그인 서버에 연결하지 못했습니다. 네트워크를 확인한 뒤 다시 연결해 주세요.');
+  }
+ })().finally(()=>{accessPromise=null});
+ return accessPromise;
 }
 async function showUserAdmin(){
  if(!(auth.user&&auth.user.isAdmin))return;
