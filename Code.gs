@@ -140,12 +140,15 @@ function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
 function getAllData_(){
-  const cache=CacheService.getScriptCache(),cacheKey='library-data-v4',cached=cache.get(cacheKey);
+  const cache=CacheService.getScriptCache(),cacheKey='library-data-v5',cached=cache.get(cacheKey);
   if(cached){try{return JSON.parse(cached)}catch(e){}}
   const ss=SpreadsheetApp.openById(SPREADSHEET_ID);
   const out={patterns:readSheet_(ss,SHEET_NAMES.patterns),lpm:readSheet_(ss,SHEET_NAMES.lpm),specialSpecs:readSheet_(ss,SHEET_NAMES.specialSpecs),emboss:readSheet_(ss,SHEET_NAMES.emboss),sites:readSheet_(ss,SHEET_NAMES.sites),config:{}};
   const publicConfig=['LIBRARY_TITLE','SYNC_INTERVAL_SECONDS','COLOR_TOLERANCE_PERCENT','VERSION'];
   readSheet_(ss,SHEET_NAMES.config).forEach(r=>{if(publicConfig.includes(r.KEY))out.config[r.KEY]=r.VALUE});
+  // 연결 정보는 RELATIONS 시트만 단일 기준으로 사용한다.
+  out.patterns.forEach(item=>{item.RelatedLPM_IDs='';item.RecommendedEmbossPlate_IDs=''});
+  out.lpm.forEach(item=>{item.RelatedPattern_IDs='';item.EmbossPlate_IDs=''});
   const relationIds_=value=>String(value||'').split(/[\r\n,;|]+/).map(v=>v.trim()).filter(Boolean);
   const addRelationIds_=(item,key,ids)=>{if(item&&ids.length)item[key]=Array.from(new Set(relationIds_(item[key]).concat(ids))).join(',')};
   const patternsById=new Map(out.patterns.map(item=>[String(item.ID||'').trim(),item]));
