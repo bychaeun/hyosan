@@ -139,7 +139,7 @@ function setUserStatus_(admin,email,status){
 function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관리자 권한이 필요합니다.','ADMIN_REQUIRED')}
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
-const DATA_CACHE_PREFIX='library-data-v6-';
+const DATA_CACHE_PREFIX='library-data-v7-';
 function readDataCache_(cache){
   try{
     const meta=JSON.parse(cache.get(DATA_CACHE_PREFIX+'meta')||'null');if(!meta||!meta.count)return null;
@@ -156,20 +156,40 @@ function writeDataCache_(cache,data){
     cache.putAll(values,1800);
   }catch(e){console.warn('Data cache skipped: '+e.message)}
 }
+function rowsFromValues_(values){
+  if(!values||values.length<2)return [];
+  const headers=values[0]||[];
+  return values.slice(1).filter(r=>r.some(v=>String(v==null?'':v)!=='')).map(r=>{
+    const item={};
+    headers.forEach((h,i)=>{const value=r[i];if(h&&value!=null&&String(value)!=='')item[h]=value});
+    return item;
+  });
+}
+function readSheetsBatch_(names){
+  const query=names.map(name=>'ranges='+encodeURIComponent("'"+String(name).replace(/'/g,"''")+"'")).join('&');
+  const url='https://sheets.googleapis.com/v4/spreadsheets/'+encodeURIComponent(SPREADSHEET_ID)+'/values:batchGet?'+query+'&valueRenderOption=FORMATTED_VALUE&majorDimension=ROWS';
+  const response=UrlFetchApp.fetch(url,{method:'get',headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()},muteHttpExceptions:true});
+  const code=response.getResponseCode();
+  if(code!==200)throw new Error('Google Sheets 일괄 읽기 실패 ('+code+'): '+response.getContentText().slice(0,300));
+  const ranges=(JSON.parse(response.getContentText()).valueRanges||[]),result={};
+  names.forEach((name,i)=>{result[name]=rowsFromValues_((ranges[i]&&ranges[i].values)||[])});
+  return result;
+}
 function getAllData_(forceRefresh){
   const cache=CacheService.getScriptCache(),cached=forceRefresh?null:readDataCache_(cache);
   if(cached)return cached;
-  const ss=SpreadsheetApp.openById(SPREADSHEET_ID);
-  const out={patterns:readSheet_(ss,SHEET_NAMES.patterns),lpm:readSheet_(ss,SHEET_NAMES.lpm),specialSpecs:readSheet_(ss,SHEET_NAMES.specialSpecs),emboss:readSheet_(ss,SHEET_NAMES.emboss),sites:readSheet_(ss,SHEET_NAMES.sites),config:{}};
+  const names=[SHEET_NAMES.patterns,SHEET_NAMES.lpm,SHEET_NAMES.specialSpecs,SHEET_NAMES.emboss,SHEET_NAMES.sites,SHEET_NAMES.config,'RELATIONS'];
+  const tables=readSheetsBatch_(names);
+  const out={patterns:tables[SHEET_NAMES.patterns]||[],lpm:tables[SHEET_NAMES.lpm]||[],specialSpecs:tables[SHEET_NAMES.specialSpecs]||[],emboss:tables[SHEET_NAMES.emboss]||[],sites:tables[SHEET_NAMES.sites]||[],config:{}};
   const publicConfig=['LIBRARY_TITLE','SYNC_INTERVAL_SECONDS','COLOR_TOLERANCE_PERCENT','VERSION'];
-  readSheet_(ss,SHEET_NAMES.config).forEach(r=>{if(r.KEY)out.config[r.KEY]=r.VALUE});
+  (tables[SHEET_NAMES.config]||[]).forEach(r=>{if(r.KEY)out.config[r.KEY]=r.VALUE});
   out.patterns.forEach(item=>{delete item.RelatedLPM_IDs;delete item.RecommendedEmbossPlate_IDs});
   out.lpm.forEach(item=>{delete item.RelatedPattern_IDs;delete item.EmbossPlate_IDs});
   const relationIds_=value=>String(value||'').split(/[\r\n,;|]+/).map(v=>v.trim()).filter(Boolean);
   const addRelationIds_=(item,key,ids)=>{if(item&&ids.length)item[key]=Array.from(new Set(relationIds_(item[key]).concat(ids))).join(',')};
   const patternsById=new Map(out.patterns.map(item=>[String(item.ID||'').trim(),item]));
   const lpmById=new Map(out.lpm.map(item=>[String(item.LPM_ID||'').trim(),item]));
-  readSheet_(ss,'RELATIONS').forEach(relation=>{
+  (tables.RELATIONS||[]).forEach(relation=>{
     const patternIds=relationIds_(relation.Pattern_ID),lpmIds=relationIds_(relation.LPM_ID),embossIds=relationIds_(relation.EmbossPlate_ID);
     patternIds.forEach(patternId=>{const pattern=patternsById.get(patternId);addRelationIds_(pattern,'RelatedLPM_IDs',lpmIds);addRelationIds_(pattern,'RecommendedEmbossPlate_IDs',embossIds)});
     lpmIds.forEach(lpmId=>{const lpm=lpmById.get(lpmId);addRelationIds_(lpm,'RelatedPattern_IDs',patternIds);addRelationIds_(lpm,'EmbossPlate_IDs',embossIds)});
