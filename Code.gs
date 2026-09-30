@@ -7,7 +7,7 @@ function doGet(e){
     const action=(e&&e.parameter&&e.parameter.action)||'data',cfg=getConfig_(),authRequired=isAuthRequired_(cfg);
     if(action==='appConfig')return jsonOutput({ok:true,clientId:cfg.GOOGLE_CLIENT_ID||'',authRequired:authRequired,appName:cfg.LIBRARY_TITLE||'HYOSAN LPM Library'});
     if(action==='health')return jsonOutput({ok:true,authRequired:authRequired});
-    if(action==='data'&&!authRequired)return jsonOutput(getAllData_());
+    if(action==='data'&&!authRequired)return jsonOutput(getAllData_(String(e.parameter.force||'').toLowerCase()==='true'));
     if(action==='data')return jsonOutput({ok:false,error:'Google login required',code:'AUTH_REQUIRED'});
     return jsonOutput({ok:false,error:'Unknown action'});
   }catch(err){return jsonOutput({ok:false,error:String(err),code:err&&err.code?err.code:'REQUEST_FAILED'})}
@@ -16,7 +16,7 @@ function doGet(e){
 function doPost(e){
   try{
     const body=JSON.parse((e&&e.postData&&e.postData.contents)||'{}'),cfg=getConfig_(),authRequired=isAuthRequired_(cfg);
-    if(!authRequired&&body.action==='data')return jsonOutput(getAllData_());
+    if(!authRequired&&body.action==='data')return jsonOutput(getAllData_(body.force===true));
     if(!authRequired&&body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmId));
     if(body.action==='authStatus'){
       const identity=verifyGoogleToken_(body.idToken,cfg),loginUser=touchUser_(identity,cfg),loginResponse=userResponse_(loginUser);
@@ -26,7 +26,7 @@ function doPost(e){
     const user=authenticateRequest_(body,cfg);
     if(body.action==='sessionStatus')return jsonOutput(userResponse_(user));
     if(user.Status!=='ADMIN'&&user.Status!=='APPROVED')return jsonOutput(userResponse_(user));
-    if(body.action==='data')return jsonOutput(Object.assign(getAllData_(),{user:userResponse_(user).user}));
+    if(body.action==='data')return jsonOutput(Object.assign(getAllData_(body.force===true),{user:userResponse_(user).user}));
     if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmId,user.Email));
     if(body.action==='listUsers')return jsonOutput(listUsers_(user));
     if(body.action==='setUserStatus')return jsonOutput(setUserStatus_(user,body.email,body.status));
@@ -139,42 +139,49 @@ function setUserStatus_(admin,email,status){
 function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관리자 권한이 필요합니다.','ADMIN_REQUIRED')}
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
-function getAllData_(){
-  const cache=CacheService.getScriptCache(),cacheKey='library-data-v5',cached=cache.get(cacheKey);
-  if(cached){try{return JSON.parse(cached)}catch(e){}}
+const DATA_CACHE_PREFIX='library-data-v6-';
+function readDataCache_(cache){
+  try{
+    const meta=JSON.parse(cache.get(DATA_CACHE_PREFIX+'meta')||'null');if(!meta||!meta.count)return null;
+    const keys=Array.from({length:meta.count},(_,i)=>DATA_CACHE_PREFIX+i),parts=cache.getAll(keys);if(keys.some(k=>!parts[k]))return null;
+    const bytes=Utilities.base64Decode(keys.map(k=>parts[k]).join('')),json=Utilities.ungzip(Utilities.newBlob(bytes)).getDataAsString();
+    return JSON.parse(json);
+  }catch(e){return null}
+}
+function writeDataCache_(cache,data){
+  try{
+    const zipped=Utilities.gzip(Utilities.newBlob(JSON.stringify(data),'application/json')),encoded=Utilities.base64Encode(zipped.getBytes()),size=80000,values={};
+    for(let i=0,n=0;i<encoded.length;i+=size,n++)values[DATA_CACHE_PREFIX+n]=encoded.slice(i,i+size);
+    values[DATA_CACHE_PREFIX+'meta']=JSON.stringify({count:Math.ceil(encoded.length/size)});
+    cache.putAll(values,1800);
+  }catch(e){console.warn('Data cache skipped: '+e.message)}
+}
+function getAllData_(forceRefresh){
+  const cache=CacheService.getScriptCache(),cached=forceRefresh?null:readDataCache_(cache);
+  if(cached)return cached;
   const ss=SpreadsheetApp.openById(SPREADSHEET_ID);
   const out={patterns:readSheet_(ss,SHEET_NAMES.patterns),lpm:readSheet_(ss,SHEET_NAMES.lpm),specialSpecs:readSheet_(ss,SHEET_NAMES.specialSpecs),emboss:readSheet_(ss,SHEET_NAMES.emboss),sites:readSheet_(ss,SHEET_NAMES.sites),config:{}};
   const publicConfig=['LIBRARY_TITLE','SYNC_INTERVAL_SECONDS','COLOR_TOLERANCE_PERCENT','VERSION'];
-  readSheet_(ss,SHEET_NAMES.config).forEach(r=>{if(publicConfig.includes(r.KEY))out.config[r.KEY]=r.VALUE});
-  // 연결 정보는 RELATIONS 시트만 단일 기준으로 사용한다.
-  out.patterns.forEach(item=>{item.RelatedLPM_IDs='';item.RecommendedEmbossPlate_IDs=''});
-  out.lpm.forEach(item=>{item.RelatedPattern_IDs='';item.EmbossPlate_IDs=''});
+  readSheet_(ss,SHEET_NAMES.config).forEach(r=>{if(r.KEY)out.config[r.KEY]=r.VALUE});
+  out.patterns.forEach(item=>{delete item.RelatedLPM_IDs;delete item.RecommendedEmbossPlate_IDs});
+  out.lpm.forEach(item=>{delete item.RelatedPattern_IDs;delete item.EmbossPlate_IDs});
   const relationIds_=value=>String(value||'').split(/[\r\n,;|]+/).map(v=>v.trim()).filter(Boolean);
   const addRelationIds_=(item,key,ids)=>{if(item&&ids.length)item[key]=Array.from(new Set(relationIds_(item[key]).concat(ids))).join(',')};
   const patternsById=new Map(out.patterns.map(item=>[String(item.ID||'').trim(),item]));
   const lpmById=new Map(out.lpm.map(item=>[String(item.LPM_ID||'').trim(),item]));
   readSheet_(ss,'RELATIONS').forEach(relation=>{
     const patternIds=relationIds_(relation.Pattern_ID),lpmIds=relationIds_(relation.LPM_ID),embossIds=relationIds_(relation.EmbossPlate_ID);
-    patternIds.forEach(patternId=>{
-      const pattern=patternsById.get(patternId);
-      addRelationIds_(pattern,'RelatedLPM_IDs',lpmIds);
-      addRelationIds_(pattern,'RecommendedEmbossPlate_IDs',embossIds);
-    });
-    lpmIds.forEach(lpmId=>{
-      const lpm=lpmById.get(lpmId);
-      addRelationIds_(lpm,'RelatedPattern_IDs',patternIds);
-      addRelationIds_(lpm,'EmbossPlate_IDs',embossIds);
-    });
+    patternIds.forEach(patternId=>{const pattern=patternsById.get(patternId);addRelationIds_(pattern,'RelatedLPM_IDs',lpmIds);addRelationIds_(pattern,'RecommendedEmbossPlate_IDs',embossIds)});
+    lpmIds.forEach(lpmId=>{const lpm=lpmById.get(lpmId);addRelationIds_(lpm,'RelatedPattern_IDs',patternIds);addRelationIds_(lpm,'EmbossPlate_IDs',embossIds)});
   });
-  try{cache.put(cacheKey,JSON.stringify(out),45)}catch(e){}
+  writeDataCache_(cache,out);
   return out;
 }
-
 function readSheet_(ss,name){
   const sh=ss.getSheetByName(name);if(!sh)return [];
-  const values=sh.getDataRange().getDisplayValues();if(values.length<2)return [];
-  const headers=values[0];
-  return values.slice(1).filter(r=>r.some(v=>v!=='')).map(r=>Object.fromEntries(headers.map((h,i)=>[h,r[i]])));
+  const lastRow=sh.getLastRow(),lastColumn=sh.getLastColumn();if(lastRow<2||lastColumn<1)return [];
+  const values=sh.getRange(1,1,lastRow,lastColumn).getDisplayValues(),headers=values[0];
+  return values.slice(1).filter(r=>r.some(v=>v!=='')).map(r=>{const item={};headers.forEach((h,i)=>{if(h&&r[i]!=='')item[h]=r[i]});return item});
 }
 
 function getLpmForExport_(lpmId){
