@@ -75,7 +75,7 @@ let db={patterns:[],lpm:[],specialSpecs:[],emboss:[],sites:[],config:{}},state={
 let indexes={patterns:new Map(),lpm:new Map(),specialSpecs:new Map(),emboss:new Map(),embossToLpm:new Map(),colors:[]},searchIndex=new WeakMap(),imageListCache=new Map(),installPrompt=null;
 const auth={required:false,clientId:'',idToken:'',sessionToken:localStorage.getItem('hyosan-session')||'',user:null};
 let accessPromise=null;
-const $=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)],split=v=>String(v||'').split(',').map(x=>x.trim()).filter(Boolean);
+const $=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)],split=v=>String(v||'').split(/[\r\n,;|]+/).map(x=>x.trim()).filter(Boolean);
 let cacheDbPromise;
 const cacheDb=()=>cacheDbPromise||(cacheDbPromise=new Promise((resolve,reject)=>{const request=indexedDB.open('hyosan-library',1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('data'))request.result.createObjectStore('data')};request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)}).catch(error=>{cacheDbPromise=null;throw error}));
 async function loadCachedData(){try{const store=(await cacheDb()).transaction('data','readonly').objectStore('data');return await new Promise((resolve,reject)=>{const r=store.get('latest');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}catch(e){return null}}
