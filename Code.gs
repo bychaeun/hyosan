@@ -140,17 +140,28 @@ function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
 function getAllData_(){
-  const cache=CacheService.getScriptCache(),cacheKey='library-data-v3',cached=cache.get(cacheKey);
+  const cache=CacheService.getScriptCache(),cacheKey='library-data-v4',cached=cache.get(cacheKey);
   if(cached){try{return JSON.parse(cached)}catch(e){}}
   const ss=SpreadsheetApp.openById(SPREADSHEET_ID);
   const out={patterns:readSheet_(ss,SHEET_NAMES.patterns),lpm:readSheet_(ss,SHEET_NAMES.lpm),specialSpecs:readSheet_(ss,SHEET_NAMES.specialSpecs),emboss:readSheet_(ss,SHEET_NAMES.emboss),sites:readSheet_(ss,SHEET_NAMES.sites),config:{}};
   const publicConfig=['LIBRARY_TITLE','SYNC_INTERVAL_SECONDS','COLOR_TOLERANCE_PERCENT','VERSION'];
   readSheet_(ss,SHEET_NAMES.config).forEach(r=>{if(publicConfig.includes(r.KEY))out.config[r.KEY]=r.VALUE});
-  readSheet_(ss,'RELATIONS').forEach(r=>{
-    const p=out.patterns.find(x=>x.ID===r.Pattern_ID),l=out.lpm.find(x=>x.LPM_ID===r.LPM_ID);
-    const add=(o,key,id)=>{if(o&&id)o[key]=Array.from(new Set(String(o[key]||'').split(',').map(x=>x.trim()).filter(Boolean).concat(id))).join(',')};
-    add(p,'RelatedLPM_IDs',r.LPM_ID);add(p,'RecommendedEmbossPlate_IDs',r.EmbossPlate_ID);
-    add(l,'RelatedPattern_IDs',r.Pattern_ID);add(l,'EmbossPlate_IDs',r.EmbossPlate_ID);
+  const relationIds_=value=>String(value||'').split(/[\r\n,;|]+/).map(v=>v.trim()).filter(Boolean);
+  const addRelationIds_=(item,key,ids)=>{if(item&&ids.length)item[key]=Array.from(new Set(relationIds_(item[key]).concat(ids))).join(',')};
+  const patternsById=new Map(out.patterns.map(item=>[String(item.ID||'').trim(),item]));
+  const lpmById=new Map(out.lpm.map(item=>[String(item.LPM_ID||'').trim(),item]));
+  readSheet_(ss,'RELATIONS').forEach(relation=>{
+    const patternIds=relationIds_(relation.Pattern_ID),lpmIds=relationIds_(relation.LPM_ID),embossIds=relationIds_(relation.EmbossPlate_ID);
+    patternIds.forEach(patternId=>{
+      const pattern=patternsById.get(patternId);
+      addRelationIds_(pattern,'RelatedLPM_IDs',lpmIds);
+      addRelationIds_(pattern,'RecommendedEmbossPlate_IDs',embossIds);
+    });
+    lpmIds.forEach(lpmId=>{
+      const lpm=lpmById.get(lpmId);
+      addRelationIds_(lpm,'RelatedPattern_IDs',patternIds);
+      addRelationIds_(lpm,'EmbossPlate_IDs',embossIds);
+    });
   });
   try{cache.put(cacheKey,JSON.stringify(out),45)}catch(e){}
   return out;
