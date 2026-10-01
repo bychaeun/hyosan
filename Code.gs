@@ -4,10 +4,9 @@ const USER_HEADERS=['Email','Name','PictureURL','Status','RequestedAt','LastLogi
 
 function doGet(e){
   try{
-    const action=(e&&e.parameter&&e.parameter.action)||'data',cfg=getConfig_(),authRequired=isAuthRequired_(cfg);
-    if(action==='appConfig')return jsonOutput({ok:true,clientId:cfg.GOOGLE_CLIENT_ID||'',authRequired:authRequired,appName:cfg.LIBRARY_TITLE||'HYOSAN LPM Library'});
-    if(action==='health')return jsonOutput({ok:true,authRequired:authRequired});
-    if(action==='data'&&!authRequired)return jsonOutput(getAllData_(String(e.parameter.force||'').toLowerCase()==='true'));
+    const action=(e&&e.parameter&&e.parameter.action)||'data',cfg=getConfig_();
+    if(action==='appConfig')return jsonOutput({ok:true,clientId:cfg.GOOGLE_CLIENT_ID||'',authRequired:true,appName:cfg.LIBRARY_TITLE||'HYOSAN LPM Library'});
+    if(action==='health')return jsonOutput({ok:true,authRequired:true});
     if(action==='data')return jsonOutput({ok:false,error:'Google login required',code:'AUTH_REQUIRED'});
     return jsonOutput({ok:false,error:'Unknown action'});
   }catch(err){return jsonOutput({ok:false,error:String(err),code:err&&err.code?err.code:'REQUEST_FAILED'})}
@@ -15,9 +14,7 @@ function doGet(e){
 
 function doPost(e){
   try{
-    const body=JSON.parse((e&&e.postData&&e.postData.contents)||'{}'),cfg=getConfig_(),authRequired=isAuthRequired_(cfg);
-    if(!authRequired&&body.action==='data')return jsonOutput(getAllData_(body.force===true));
-    if(!authRequired&&body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmId));
+    const body=JSON.parse((e&&e.postData&&e.postData.contents)||'{}'),cfg=getConfig_();
     if(body.action==='authStatus'){
       const identity=verifyGoogleToken_(body.idToken,cfg),loginUser=touchUser_(identity,cfg),loginResponse=userResponse_(loginUser);
       if(loginResponse.ok)loginResponse.sessionToken=createSessionToken_(loginUser.Email);
@@ -42,8 +39,6 @@ function getConfig_(){
   try{cache.put(key,JSON.stringify(cfg),300)}catch(e){}
   return cfg;
 }
-
-function isAuthRequired_(cfg){return String(cfg.AUTH_REQUIRED||'').toUpperCase()==='TRUE'}
 
 function authenticateRequest_(body,cfg){
   if(body.sessionToken)return getUserByEmail_(verifySessionToken_(body.sessionToken));
