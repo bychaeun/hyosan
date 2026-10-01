@@ -41,6 +41,16 @@ ChatGPT 등 앱 내부 브라우저에서는 설치 메뉴가 제공되지 않�
 
 패턴 디자인 필터도 `PATTERN_DESIGN` 시트의 `PrimaryCategory` 값을 기준으로 자동 생성됩니다. 별도의 `CATEGORIES` 시트는 사용하지 않습니다.
 
+## 연결 관계 관리
+
+`RELATIONS` 시트는 사람이 확인하기 쉬운 이름으로 입력합니다.
+
+- `Pattern_Name`: `PATTERN_DESIGN`의 `PatternName_KR` 또는 `PatternName_EN`
+- `LPM_ProductName`: `HYOSAN_LPM`의 `ProductName`
+- `EmbossPlate_Name`: `EMBOSS_PLATE`의 `PlateName`
+
+여러 제품은 셀 안에서 줄바꿈으로 구분합니다. 기존에 입력된 `Pattern_ID`, `LPM_ID`, `EmbossPlate_ID` 값도 계속 인식하므로 이전 연결은 유지됩니다. 이름은 공백과 영문 대소문자를 무시하고 정확히 일치시켜 연결하며, 동일한 이름이 여러 제품에 중복되면 잘못 연결하지 않도록 해당 이름은 자동 연결에서 제외합니다.
+
 ## 경면판 표시 여부
 
 `EMBOSS_PLATE` 시트의 `Active` 열을 사용합니다.
