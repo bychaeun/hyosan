@@ -187,23 +187,23 @@ function getAllData_(forceRefresh){
   out.lpm.forEach(item=>{delete item.RelatedPattern_IDs;delete item.EmbossPlate_IDs});
   const relationIds_=value=>String(value||'').split(/[\r\n,;|]+/).map(v=>v.trim()).filter(Boolean);
   const relationKey_=value=>String(value||'').trim().toLocaleLowerCase().replace(/\s+/g,' ');
-  const uniqueNameLookup_=(items,nameFields,idField)=>{
+  const nameLookup_=(items,nameFields,idField)=>{
     const lookup=new Map();
     items.forEach(item=>nameFields.forEach(field=>{
       const key=relationKey_(item[field]);if(!key)return;const id=String(item[idField]||'').trim();
-      if(!id)return;if(!lookup.has(key))lookup.set(key,id);else if(lookup.get(key)!==id)lookup.set(key,'');
+      if(!id)return;const ids=lookup.get(key)||[];if(!ids.includes(id))ids.push(id);lookup.set(key,ids);
     }));
     return lookup;
   };
   const relationValue_=(relation,names)=>{for(const name of names)if(relation[name]!=null&&String(relation[name]).trim())return relation[name];return ''};
-  const resolveRelationIds_=(value,byId,byName)=>relationIds_(value).map(token=>byId.has(token)?token:byName.get(relationKey_(token))).filter(Boolean);
+  const resolveRelationIds_=(value,byId,byName)=>Array.from(new Set(relationIds_(value).flatMap(token=>byId.has(token)?[token]:(byName.get(relationKey_(token))||[]))));
   const addRelationIds_=(item,key,ids)=>{if(item&&ids.length)item[key]=Array.from(new Set(relationIds_(item[key]).concat(ids))).join(',')};
   const patternsById=new Map(out.patterns.map(item=>[String(item.ID||'').trim(),item]));
   const lpmById=new Map(out.lpm.map(item=>[String(item.LPM_ID||'').trim(),item]));
   const embossById=new Map(out.emboss.map(item=>[String(item.EmbossPlate_ID||'').trim(),item]));
-  const patternsByName=uniqueNameLookup_(out.patterns,['PatternName_KR','PatternName_EN'],'ID');
-  const lpmByName=uniqueNameLookup_(out.lpm,['ProductName'],'LPM_ID');
-  const embossByName=uniqueNameLookup_(out.emboss,['PlateName'],'EmbossPlate_ID');
+  const patternsByName=nameLookup_(out.patterns,['PatternName_KR','PatternName_EN'],'ID');
+  const lpmByName=nameLookup_(out.lpm,['ProductName'],'LPM_ID');
+  const embossByName=nameLookup_(out.emboss,['PlateName'],'EmbossPlate_ID');
   (tables.RELATIONS||[]).forEach(relation=>{
     const patternIds=resolveRelationIds_(relationValue_(relation,['Pattern_Name','PatternName','Pattern_ID']),patternsById,patternsByName),lpmIds=resolveRelationIds_(relationValue_(relation,['LPM_ProductName','LPM_Name','ProductName','LPM_ID']),lpmById,lpmByName),embossIds=resolveRelationIds_(relationValue_(relation,['EmbossPlate_Name','PlateName','EmbossPlate_ID']),embossById,embossByName);
     patternIds.forEach(patternId=>{const pattern=patternsById.get(patternId);addRelationIds_(pattern,'RelatedLPM_IDs',lpmIds);addRelationIds_(pattern,'RecommendedEmbossPlate_IDs',embossIds)});
