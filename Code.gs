@@ -24,7 +24,7 @@ function doPost(e){
     if(body.action==='sessionStatus')return jsonOutput(userResponse_(user));
     if(user.Status!=='ADMIN'&&user.Status!=='APPROVED')return jsonOutput(userResponse_(user));
     if(body.action==='data')return jsonOutput(Object.assign(getAllData_(body.force===true),{user:userResponse_(user).user}));
-    if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmId,user.Email));
+    if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmIds||body.lpmId,user.Email));
     if(body.action==='listUsers')return jsonOutput(listUsers_(user));
     if(body.action==='setUserStatus')return jsonOutput(setUserStatus_(user,body.email,body.status));
     return jsonOutput({ok:false,error:'Unknown action'});
@@ -214,13 +214,12 @@ function readSheet_(ss,name){
   return values.slice(1).filter(r=>r.some(v=>v!=='')).map(r=>{const item={};headers.forEach((h,i)=>{if(h&&r[i]!=='')item[h]=r[i]});return item});
 }
 
-function getLpmForExport_(lpmId){
-  const id=String(lpmId||'').trim(),cache=CacheService.getScriptCache(),key='lpm-export-'+Utilities.base64EncodeWebSafe(id).replace(/=+$/,'').slice(0,80),cached=cache.get(key);
-  if(cached){try{return JSON.parse(cached)}catch(e){}}
-  const item=readSheet_(SpreadsheetApp.openById(SPREADSHEET_ID),SHEET_NAMES.lpm).find(r=>String(r.LPM_ID||'').trim()===id);
-  if(!item)throw new Error('LPM not found: '+id);
-  try{cache.put(key,JSON.stringify(item),120)}catch(e){}
-  return item;
+function getLpmsForExport_(lpmIds){
+  const ids=Array.from(new Set((Array.isArray(lpmIds)?lpmIds:[lpmIds]).map(v=>String(v||'').trim()).filter(Boolean))).slice(0,50);
+  if(!ids.length)throw new Error('lpmId is required');
+  const wanted=new Set(ids),rows=readSheet_(SpreadsheetApp.openById(SPREADSHEET_ID),SHEET_NAMES.lpm),byId=new Map(rows.filter(r=>wanted.has(String(r.LPM_ID||'').trim())).map(r=>[String(r.LPM_ID||'').trim(),r])),items=ids.map(id=>byId.get(id)).filter(Boolean);
+  if(!items.length)throw new Error('선택한 LPM 제품을 찾을 수 없습니다.');
+  return items;
 }
 
 function exportImageUrls_(item){
@@ -228,27 +227,32 @@ function exportImageUrls_(item){
   return values.flatMap(v=>String(v||'').split(/[\r\n,;|]+/)).map(v=>v.trim()).filter(v=>/^https?:\/\//i.test(v)&&!seen[v]&&(seen[v]=true));
 }
 
-function exportToSlides_(lpmId,requesterEmail){
-  if(!lpmId)throw new Error('lpmId is required');
-  const item=getLpmForExport_(lpmId),cfg=getConfig_(),title='HYOSAN LPM Export - '+(item.ProductName||item.LPM_ID),destinationId=String(cfg.SLIDES_DESTINATION_ID||'').trim();
+function exportToSlides_(lpmIds,requesterEmail){
+  const items=getLpmsForExport_(lpmIds),cfg=getConfig_(),title=items.length===1?'HYOSAN LPM Export - '+(items[0].ProductName||items[0].LPM_ID):'HYOSAN LPM Export - '+items.length+' products',destinationId=String(cfg.SLIDES_DESTINATION_ID||'').trim();
   let pres,created=false,destinationWarning='';
   if(destinationId){
     try{pres=SlidesApp.openById(destinationId)}
     catch(err){destinationWarning='설정된 슬라이드 파일을 열 수 없어 새 파일로 생성했습니다.';pres=SlidesApp.create(title);created=true}
   }else{pres=SlidesApp.create(title);created=true}
-  const initialSlide=created?pres.getSlides()[0]:null,slide=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK),W=pres.getPageWidth(),H=pres.getPageHeight(),imageSize=Math.min(H,W*.58);
-  const imageInserted=insertSquareImage_(slide,exportImageUrls_(item),0,(H-imageSize)/2,imageSize);
+  const initialSlide=created?pres.getSlides()[0]:null,W=pres.getPageWidth(),H=pres.getPageHeight(),results=items.map(item=>appendLpmSlide_(pres,item,W,H));
+  if(initialSlide)initialSlide.remove();
+  const presentationId=pres.getId(),url='https://docs.google.com/presentation/d/'+presentationId+'/edit';
+  pres.saveAndClose();
+  const sharing=sharePresentation_(presentationId,requesterEmail,cfg),warnings=[destinationWarning,sharing.warning||''].filter(Boolean).join(' '),failed=results.filter(r=>!r.imageInserted);
+  return {ok:true,presentationId:presentationId,url:url,imageInserted:failed.length===0,exportedCount:results.length,failedCount:failed.length,failedIds:failed.map(r=>r.id),sharedWith:sharing.shared?requesterEmail:'',shareWarning:warnings};
+}
+
+function appendLpmSlide_(pres,item,W,H){
+  const slide=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK),imageSize=Math.min(H,W*.58);
+  let imageInserted=false;
+  try{imageInserted=insertSquareImage_(slide,exportImageUrls_(item),0,(H-imageSize)/2,imageSize)}catch(err){console.warn('Slides image failed for '+item.LPM_ID+': '+err.message)}
   const x=W*.62,w=W*.32;
   addText_(slide,item.ProductName||'',x,H*.12,w,40,15,true);
   addText_(slide,'종이 넘버',x,H*.23,w,18,11,true);addText_(slide,item.PaperNumber||item.PaperNo||item.PatternForm||'-',x,H*.28,w,24,8,false);
   addText_(slide,'샘플북',x,H*.39,w,18,11,true);addText_(slide,item.SampleBook||'-',x,H*.44,w,24,8,false);
   addText_(slide,'분류',x,H*.55,w,18,11,true);addText_(slide,item.Category||'-',x,H*.60,w,24,8,false);
   addText_(slide,'용도',x,H*.71,w,18,11,true);addText_(slide,item.Applications||'-',x,H*.76,w,44,8,false);
-  if(initialSlide)initialSlide.remove();
-  const presentationId=pres.getId(),url='https://docs.google.com/presentation/d/'+presentationId+'/edit';
-  pres.saveAndClose();
-  const sharing=sharePresentation_(presentationId,requesterEmail,cfg),warnings=[destinationWarning,sharing.warning||''].filter(Boolean).join(' ');
-  return {ok:true,presentationId:presentationId,url:url,imageInserted:imageInserted,sharedWith:sharing.shared?requesterEmail:'',shareWarning:warnings};
+  return {id:item.LPM_ID,imageInserted:imageInserted};
 }
 
 function sharePresentation_(presentationId,requesterEmail,cfg){
