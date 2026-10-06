@@ -262,7 +262,9 @@ async function exportSelectedSlides(){
  exporting=true;actionStatus(ids.length+'개 제품의 Google Slides를 만들고 있습니다…');const popup=window.open('about:blank','_blank');if(popup)popup.opener=null;
  try{const j=await apiPost('exportToSlides',{lpmIds:ids},Math.max(CONFIG.EXPORT_TIMEOUT_MS,120000),false),url=slidesLink(j),failed=Number(j.failedCount||0),message=failed?`${j.exportedCount||ids.length-failed}개 제품을 내보냈고 ${failed}개 이미지는 추가하지 못했습니다.`:`${j.exportedCount||ids.length}개 제품을 Google Slides로 내보냈습니다.`;actionStatus(message+(j.shareWarning?' '+j.shareWarning:''));const link=document.createElement('a');link.href=url;link.target='_blank';link.rel='noopener';link.textContent=' Google Slides 열기';($('#actionStatus')||$('#lpmExportStatus'))?.appendChild(link);if(popup)popup.location.href=url}catch(e){if(popup)popup.close();actionStatus('Slides 일괄 내보내기 실패: '+e.message)}finally{exporting=false}
 }
-let printSelectionIds=null;
+let printSelectionIds=null,printing=false,printPrepared=false;
+function printImageUrl(value){try{const url=new URL(String(value||''));if(/(^|\.)drive\.google\.com$/i.test(url.hostname)&&url.pathname==='/thumbnail'){url.searchParams.set('sz','w640');return url.href}}catch(e){}return value}
+function printCard(item,type){const node=card(item,type),img=node.querySelector('img');node.removeAttribute('tabindex');node.removeAttribute('role');node.onclick=null;node.onkeydown=null;node.querySelector('.card-select')?.remove();node.classList.remove('selected');if(img){img.loading='eager';img.decoding='async';img.fetchPriority='high';img.src=printImageUrl(img.src)}return node}
 function buildPrintCatalog(){
  const page=$('.page.active'),menu=$('.nav button.active').textContent,category=page.querySelector('.tabs button.active');
  const title=category?menu+' · '+category.textContent:menu;let rows=[],type='lpm';
@@ -272,14 +274,15 @@ function buildPrintCatalog(){
  else if(page.id==='emboss'){type='emboss';rows=db.emboss.filter(x=>isActive(x)&&searchOK(x))}
  else if(page.id==='construction'){type='site';rows=db.sites.filter(x=>isActive(x)&&(state.siteCompany==='ALL'||x.Company===state.siteCompany)&&searchOK(x))}
  else{const lab=rgbLab(hexRgb(state.selectedHex));rows=db.lpm.filter(x=>/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(x.ColorHex)&&isActive(x)).map(x=>({...x,_d:dE(lab,rgbLab(hexRgb(x.ColorHex)))})).filter(x=>x._d<=CONFIG.COLOR_TOLERANCE_PERCENT).sort((a,b)=>a._d-b._d)}
- const printPageSize=16,root=$('#printArea');root.replaceChildren();const pages=Math.max(1,Math.ceil(rows.length/printPageSize));
- for(let p=0;p<pages;p++){const sheet=document.createElement('section');sheet.className='print-sheet';const heading=document.createElement('h1');heading.className='print-heading';heading.textContent=title;sheet.appendChild(heading);const search=document.createElement('div');search.className='print-search';search.textContent='품번 / 이름 검색: '+($('#search').value.trim()||'전체')+(page.id==='colorist'?' · '+state.selectedHex:'');sheet.appendChild(search);const cards=document.createElement('div');cards.className='print-cards';rows.slice(p*printPageSize,p*printPageSize+printPageSize).forEach(x=>cards.appendChild(card(x,type)));if(!rows.length)cards.textContent='검색 결과가 없습니다.';sheet.appendChild(cards);const footer=document.createElement('p');footer.className='print-footer';footer.textContent='HYOSAN LPM · '+rows.length+'개 · '+(p+1)+' / '+pages;sheet.appendChild(footer);root.appendChild(sheet)}
+ const printPageSize=16,root=$('#printArea'),fragment=document.createDocumentFragment(),pages=Math.max(1,Math.ceil(rows.length/printPageSize));root.replaceChildren();
+ for(let p=0;p<pages;p++){const sheet=document.createElement('section');sheet.className='print-sheet';const heading=document.createElement('h1');heading.className='print-heading';heading.textContent=title;sheet.appendChild(heading);const search=document.createElement('div');search.className='print-search';search.textContent='품번 / 이름 검색: '+($('#search').value.trim()||'전체')+(page.id==='colorist'?' · '+state.selectedHex:'');sheet.appendChild(search);const cards=document.createElement('div');cards.className='print-cards';rows.slice(p*printPageSize,p*printPageSize+printPageSize).forEach(x=>cards.appendChild(printCard(x,type)));if(!rows.length)cards.textContent='검색 결과가 없습니다.';sheet.appendChild(cards);const footer=document.createElement('p');footer.className='print-footer';footer.textContent='HYOSAN LPM · '+rows.length+'개 · '+(p+1)+' / '+pages;sheet.appendChild(footer);fragment.appendChild(sheet)}root.appendChild(fragment);printPrepared=true
 }
+function waitForPrintImage(img){if(img.complete)return Promise.resolve();const loaded=new Promise(resolve=>{img.addEventListener('load',resolve,{once:true});img.addEventListener('error',resolve,{once:true})}),decoded=img.decode?img.decode().catch(()=>loaded):loaded;return Promise.race([decoded,new Promise(resolve=>setTimeout(resolve,8000))])}
 async function printCatalog(){
- buildPrintCatalog();await Promise.all([...$('#printArea').querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));await document.fonts.ready;window.print();
+ if(printing)return;printing=true;try{buildPrintCatalog();actionStatus('PDF 인쇄 화면을 준비하고 있습니다…');await new Promise(requestAnimationFrame);await Promise.all([...$('#printArea').querySelectorAll('img')].map(waitForPrintImage));await Promise.race([document.fonts.ready,new Promise(resolve=>setTimeout(resolve,2000))]);window.print()}finally{printing=false}
 }
-window.addEventListener('beforeprint',buildPrintCatalog);
-window.addEventListener('afterprint',()=>{printSelectionIds=null});
+window.addEventListener('beforeprint',()=>{if(!printPrepared)buildPrintCatalog()});
+window.addEventListener('afterprint',()=>{printSelectionIds=null;printPrepared=false;$('#printArea').replaceChildren()});
 async function printSelectedLpm(){if(isMobileDevice()){showInstallHelp('PDF 저장은 웹(PC)에서만 이용할 수 있습니다.');return}if(!state.selectedLpmIds.size){actionStatus('PDF로 내보낼 효산 LPM 제품을 먼저 선택해 주세요.');return}printSelectionIds=new Set(state.selectedLpmIds);await printCatalog()}
 
 function composerImage(item,type){return type==='lpm'?(item.PreviewImageURL||item.ImageURL||item.ImageURLs):(item.ImageURL||item.ImageURLs||item.ImageURL2||item.ImageURL3)}
