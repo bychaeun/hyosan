@@ -26,12 +26,12 @@
  @page{size:A4 portrait;margin:12mm}
  body{background:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
  body>*{display:none!important}body>#printArea{display:block!important}
- .print-sheet{break-after:page;page-break-after:always}.print-sheet:last-child{break-after:auto;page-break-after:auto}
+ .print-sheet{break-inside:avoid;page-break-inside:avoid}.print-sheet+.print-sheet{break-before:page;page-break-before:always}
  .print-heading{margin:0 0 3mm;font-size:18pt}.print-search{border:1px solid #bbb;border-radius:2mm;padding:3mm;margin:0 0 5mm;font-size:10pt}
- .print-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3mm;align-items:stretch}
- .print-cards .card{display:block!important;width:100%;height:58mm;break-inside:avoid;page-break-inside:avoid;border:1px solid #ccc;border-radius:2mm;box-shadow:none;transform:none;overflow:hidden;outline:none}.print-cards .card-select{display:none!important}
+ .print-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:56mm;gap:3mm;align-items:stretch}
+ .print-cards .card{display:block!important;width:100%;height:56mm;break-inside:avoid;page-break-inside:avoid;border:1px solid #ccc;border-radius:2mm;box-shadow:none;transform:none;overflow:hidden;outline:none}.print-cards .card-select{display:none!important}
  .print-cards .card img{display:block;width:calc(100% - 4mm)!important;height:auto!important;aspect-ratio:1/1;object-fit:cover;margin:2mm 2mm 0;background:#eee}
- .print-cards .body{height:14mm;padding:1.2mm 2mm;min-width:0;overflow:hidden}.print-cards h2{font-size:8pt;line-height:1.25;margin:0 0 1mm;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.print-cards .tag{font-size:6.5pt;line-height:1.25;overflow-wrap:anywhere;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .print-cards .body{height:12mm;padding:1.2mm 2mm;min-width:0;overflow:hidden}.print-cards h2{font-size:8pt;line-height:1.25;margin:0 0 1mm;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.print-cards .tag{font-size:6.5pt;line-height:1.25;overflow-wrap:anywhere;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  .print-footer{text-align:right;font-size:8pt;color:#666;margin-top:4mm}
 }
 

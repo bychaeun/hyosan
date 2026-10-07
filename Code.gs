@@ -24,7 +24,7 @@ function doPost(e){
     if(body.action==='sessionStatus')return jsonOutput(userResponse_(user));
     if(user.Status!=='ADMIN'&&user.Status!=='APPROVED')return jsonOutput(userResponse_(user));
     if(body.action==='data')return jsonOutput(Object.assign(getAllData_(body.force===true),{user:userResponse_(user).user}));
-    if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmIds||body.lpmId,user.Email));
+    if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmIds||body.lpmId,user.Email,cfg));
     if(body.action==='listUsers')return jsonOutput(listUsers_(user));
     if(body.action==='setUserStatus')return jsonOutput(setUserStatus_(user,body.email,body.status));
     return jsonOutput({ok:false,error:'Unknown action'});
@@ -217,7 +217,7 @@ function readSheet_(ss,name){
 function getLpmsForExport_(lpmIds){
   const ids=Array.from(new Set((Array.isArray(lpmIds)?lpmIds:[lpmIds]).map(v=>String(v||'').trim()).filter(Boolean))).slice(0,50);
   if(!ids.length)throw new Error('lpmId is required');
-  const wanted=new Set(ids),rows=readSheet_(SpreadsheetApp.openById(SPREADSHEET_ID),SHEET_NAMES.lpm),byId=new Map(rows.filter(r=>wanted.has(String(r.LPM_ID||'').trim())).map(r=>[String(r.LPM_ID||'').trim(),r])),items=ids.map(id=>byId.get(id)).filter(Boolean);
+  const wanted=new Set(ids),rows=getAllData_(false).lpm||[],byId=new Map(rows.filter(r=>wanted.has(String(r.LPM_ID||'').trim())).map(r=>[String(r.LPM_ID||'').trim(),r])),items=ids.map(id=>byId.get(id)).filter(Boolean);
   if(!items.length)throw new Error('선택한 LPM 제품을 찾을 수 없습니다.');
   return items;
 }
@@ -227,8 +227,9 @@ function exportImageUrls_(item){
   return values.flatMap(v=>String(v||'').split(/[\r\n,;|]+/)).map(v=>v.trim()).filter(v=>/^https?:\/\//i.test(v)&&!seen[v]&&(seen[v]=true));
 }
 
-function exportToSlides_(lpmIds,requesterEmail){
-  const items=getLpmsForExport_(lpmIds),cfg=getConfig_(),title=items.length===1?'HYOSAN LPM Export - '+(items[0].ProductName||items[0].LPM_ID):'HYOSAN LPM Export - '+items.length+' products',destinationId=String(cfg.SLIDES_DESTINATION_ID||'').trim();
+function exportToSlides_(lpmIds,requesterEmail,cfg){
+  cfg=cfg||getConfig_();
+  const items=getLpmsForExport_(lpmIds),title=items.length===1?'HYOSAN LPM Export - '+(items[0].ProductName||items[0].LPM_ID):'HYOSAN LPM Export - '+items.length+' products',destinationId=String(cfg.SLIDES_DESTINATION_ID||'').trim();
   let pres,created=false,destinationWarning='';
   if(destinationId){
     try{pres=SlidesApp.openById(destinationId)}
@@ -301,11 +302,12 @@ function insertSquareImage_(slide,urls,x,y,size){
   if(!candidates.length)throw new Error('시트에 이미지 URL이 없습니다.');
   let lastError;
   for(let i=0;i<candidates.length;i++){
+    let placeholder;
     try{
-      const blob=imageBlob_(candidates[i]),image=slide.insertImage(blob);
-      image.setLeft(x).setTop(y).setWidth(size).setHeight(size).replace(blob,true);
+      const blob=imageBlob_(candidates[i]);placeholder=slide.insertShape(SlidesApp.ShapeType.RECTANGLE,x,y,size,size);
+      placeholder.replaceWithImage(blob,true);
       return true;
-    }catch(err){lastError=err;console.warn('Slides image candidate '+(i+1)+' failed: '+err.message)}
+    }catch(err){try{if(placeholder)placeholder.remove()}catch(removeErr){}lastError=err;console.warn('Slides image candidate '+(i+1)+' failed: '+err.message)}
   }
   throw new Error('슬라이드 이미지 삽입 실패: '+(lastError?lastError.message:'이미지를 읽을 수 없습니다.'));
 }
