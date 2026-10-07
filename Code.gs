@@ -223,7 +223,7 @@ function getLpmsForExport_(lpmIds){
 }
 
 function exportImageUrls_(item){
-  const values=[item.ImageURL,item.PreviewImageURL,item.ImageURLs,item.ImageURL2,item.ImageURL3],seen={};
+  const values=[item.ImageURL,item.ImageURLs,item.ImageURL2,item.ImageURL3],seen={};
   return values.flatMap(v=>String(v||'').split(/[\r\n,;|]+/)).map(v=>v.trim()).filter(v=>/^https?:\/\//i.test(v)&&!seen[v]&&(seen[v]=true));
 }
 

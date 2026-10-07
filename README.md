@@ -64,6 +64,13 @@ ChatGPT 등 앱 내부 브라우저에서는 설치 메뉴가 제공되지 않�
 
 여러 제품은 셀 안에서 줄바꿈으로 구분합니다. 기존에 입력된 `Pattern_ID`, `LPM_ID`, `EmbossPlate_ID` 값도 계속 인식하므로 이전 연결은 유지됩니다. 이름은 공백과 영문 대소문자를 무시하고 정확히 일치시켜 연결합니다. 동일한 이름이 여러 제품에 중복되면 일치하는 제품을 모두 연결해 화면에 표시합니다.
 
+연결은 `RELATIONS` 시트에서만 관리하므로 아래 열은 삭제해도 됩니다.
+
+- `PATTERN_DESIGN`: `RecommendedEmbossPlate_IDs`, `RelatedLPM_IDs`
+- `HYOSAN_LPM`: `EmbossPlate_IDs`, `RelatedPattern_IDs`
+
+서버가 동기화할 때 같은 이름의 내부 연결 데이터를 자동 생성하므로 사이트의 추천 경면판, 비슷한 LPM, 관련 패턴 표시는 유지됩니다.
+
 ## 경면판 표시 여부
 
 `EMBOSS_PLATE` 시트의 `Active` 열을 사용합니다.
