@@ -57,7 +57,7 @@ function parseIndexRows_(values){
 }
 
 function reconcileIndexRows_(sheet,sourceRows){
-  const lastRow=sheet.getLastRow(),lastColumn=Math.max(sheet.getLastColumn(),9),values=lastRow>1?sheet.getRange(2,1,lastRow-1,9).getDisplayValues():[];
+  const lastRow=sheet.getLastRow(),lastColumn=Math.max(sheet.getLastColumn(),13),values=lastRow>1?sheet.getRange(2,1,lastRow-1,9).getDisplayValues():[];
   const targets=values.map((row,i)=>({sheetRow:i+2,id:row[0],product:row[1],previous:row[2],paper:row[7],company:row[8]}));
   const aliasMap=new Map();
   sourceRows.forEach(source=>source.aliases.forEach(alias=>{const key=indexNorm_(alias),list=aliasMap.get(key)||[];list.push(source);aliasMap.set(key,list)}));
@@ -87,7 +87,7 @@ function reconcileIndexRows_(sheet,sourceRows){
   colorIndexRows_(sheet,changed,lastColumn,INDEX_COLORS.changed);
   colorIndexRows_(sheet,manual,lastColumn,INDEX_COLORS.manual);
   colorIndexRows_(sheet,ambiguous,lastColumn,INDEX_COLORS.ambiguous);
-  writeIndexDiffNotes_(sheet,lastRow,changedNotes);
+  writeIndexDiffColumn_(sheet,lastRow,changedNotes);
   const additions=sourceRows.filter(source=>!used.has(source)),newRows=[];
   if(additions.length){
     let nextId=targets.reduce((max,row)=>Math.max(max,Number((String(row.id||'').match(/(\d+)$/)||[])[1]||0)),0)+1,startRow=sheet.getLastRow()+1;
@@ -101,12 +101,14 @@ function reconcileIndexRows_(sheet,sourceRows){
 }
 
 function indexDisplay_(value){const text=String(value==null?'':value).trim();return text||'(빈칸)'}
-function writeIndexDiffNotes_(sheet,lastRow,entries){
+function writeIndexDiffColumn_(sheet,lastRow,entries){
+  const column=13,header='인덱스 변경 내용';
+  if(sheet.getMaxColumns()<column)sheet.insertColumnsAfter(sheet.getMaxColumns(),column-sheet.getMaxColumns());
+  sheet.getRange(1,column).setValue(header);
   if(lastRow<2)return;
-  const tag='[INDEX SYNC]',range=sheet.getRange(2,1,lastRow-1,1),notes=range.getNotes();
-  notes.forEach(row=>{if(String(row[0]||'').startsWith(tag))row[0]=''});
-  entries.forEach(entry=>{notes[entry.row-2][0]=tag+' 변경 확인\n'+entry.diffs.join('\n')});
-  range.setNotes(notes);
+  const values=Array.from({length:lastRow-1},()=>['']);
+  entries.forEach(entry=>{values[entry.row-2][0]=entry.diffs.join('\n')});
+  sheet.getRange(2,column,lastRow-1,1).setValues(values).setWrap(true);
 }
 function splitIndexNames_(value){return String(value||'').split(/[\r\n,;|/]+/).map(v=>v.trim()).filter(Boolean)}
 function indexNorm_(value){return String(value||'').normalize('NFKC').trim().replace(/\s+/g,'').toUpperCase()}
