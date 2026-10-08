@@ -61,7 +61,7 @@ function reconcileIndexRows_(sheet,sourceRows){
   const targets=values.map((row,i)=>({sheetRow:i+2,id:row[0],product:row[1],previous:row[2],paper:row[7],company:row[8]}));
   const aliasMap=new Map();
   sourceRows.forEach(source=>source.aliases.forEach(alias=>{const key=indexNorm_(alias),list=aliasMap.get(key)||[];list.push(source);aliasMap.set(key,list)}));
-  const used=new Set(),changed=[],manual=[],ambiguous=[];
+  const used=new Set(),changed=[],changedNotes=[],manual=[],ambiguous=[];
   targets.forEach(target=>{
     const keys=[target.product].concat(splitIndexNames_(target.previous)).map(indexNorm_).filter(Boolean),candidates=[];
     keys.forEach(key=>(aliasMap.get(key)||[]).forEach(item=>{if(!candidates.includes(item))candidates.push(item)}));
@@ -75,14 +75,19 @@ function reconcileIndexRows_(sheet,sourceRows){
     }
     if(matched.length===1){
       const source=matched[0];used.add(source);
-      const oldPrevious=splitIndexNames_(target.previous).map(indexNorm_).filter(Boolean).sort().join('|'),newPrevious=source.previous.map(indexNorm_).filter(Boolean).sort().join('|');
-      if(indexNorm_(target.product)!==indexNorm_(source.current)||oldPrevious!==newPrevious||indexNorm_(target.paper)!==indexNorm_(source.paper)||indexCompanyNorm_(target.company)!==indexCompanyNorm_(source.company))changed.push(target.sheetRow);
+      const oldPrevious=splitIndexNames_(target.previous).map(indexNorm_).filter(Boolean).sort().join('|'),newPrevious=source.previous.map(indexNorm_).filter(Boolean).sort().join('|'),diffs=[];
+      if(indexNorm_(target.product)!==indexNorm_(source.current))diffs.push('제품명: '+indexDisplay_(target.product)+' → '+indexDisplay_(source.current));
+      if(oldPrevious!==newPrevious)diffs.push('이전 제품명: '+indexDisplay_(target.previous)+' → '+indexDisplay_(source.previous.join(', ')));
+      if(indexNorm_(target.paper)!==indexNorm_(source.paper))diffs.push('종이번호: '+indexDisplay_(target.paper)+' → '+indexDisplay_(source.paper));
+      if(indexCompanyNorm_(target.company)!==indexCompanyNorm_(source.company))diffs.push('종이회사: '+indexDisplay_(target.company)+' → '+indexDisplay_(source.company));
+      if(diffs.length){changed.push(target.sheetRow);changedNotes.push({row:target.sheetRow,diffs:diffs})}
     }else if(!matched.length)manual.push(target.sheetRow);else ambiguous.push(target.sheetRow);
   });
   clearOldIndexStatusColors_(sheet,lastRow,lastColumn);
   colorIndexRows_(sheet,changed,lastColumn,INDEX_COLORS.changed);
   colorIndexRows_(sheet,manual,lastColumn,INDEX_COLORS.manual);
   colorIndexRows_(sheet,ambiguous,lastColumn,INDEX_COLORS.ambiguous);
+  writeIndexDiffNotes_(sheet,lastRow,changedNotes);
   const additions=sourceRows.filter(source=>!used.has(source)),newRows=[];
   if(additions.length){
     let nextId=targets.reduce((max,row)=>Math.max(max,Number((String(row.id||'').match(/(\d+)$/)||[])[1]||0)),0)+1,startRow=sheet.getLastRow()+1;
@@ -95,6 +100,14 @@ function reconcileIndexRows_(sheet,sourceRows){
   return {ok:true,sourceFile:INDEX_SOURCE.fileName,sourceCount:sourceRows.length,changedCount:changed.length,manualCount:manual.length,ambiguousCount:ambiguous.length,addedCount:newRows.length,addedIds:newRows.map(row=>row.id),syncedAt:new Date().toISOString()};
 }
 
+function indexDisplay_(value){const text=String(value==null?'':value).trim();return text||'(빈칸)'}
+function writeIndexDiffNotes_(sheet,lastRow,entries){
+  if(lastRow<2)return;
+  const tag='[INDEX SYNC]',range=sheet.getRange(2,1,lastRow-1,1),notes=range.getNotes();
+  notes.forEach(row=>{if(String(row[0]||'').startsWith(tag))row[0]=''});
+  entries.forEach(entry=>{notes[entry.row-2][0]=tag+' 변경 확인\n'+entry.diffs.join('\n')});
+  range.setNotes(notes);
+}
 function splitIndexNames_(value){return String(value||'').split(/[\r\n,;|/]+/).map(v=>v.trim()).filter(Boolean)}
 function indexNorm_(value){return String(value||'').normalize('NFKC').trim().replace(/\s+/g,'').toUpperCase()}
 function indexCompanyNorm_(value){return indexNorm_(value).replace(/\(주\)|㈜/g,'')}
