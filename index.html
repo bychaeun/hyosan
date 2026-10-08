@@ -204,7 +204,7 @@ function renderEmboss(){const p=pageRows(db.emboss.filter(x=>isActive(x)&&search
 function siteTypeValue(x){return String(x.SiteType||x.SpaceType||x.MajorCategory||'').trim()||'건설사'}
 function siteTypeCode(x){return compactCode(siteTypeValue(x))}
 function siteTypeLabel(x){return siteTypeValue(x)}
-function siteTypes(){const found=new Map([['건설사','건설사'],['상업공간','상업공간']]);db.sites.filter(isActive).forEach(x=>{const label=siteTypeValue(x),code=siteTypeCode(x);if(!found.has(code))found.set(code,label)});return [{code:'ALL',label:'전체'},...[...found].map(([code,label])=>({code,label}))]}
+function siteTypes(){const found=new Map();db.sites.filter(isActive).forEach(x=>{const label=siteTypeValue(x),code=siteTypeCode(x);if(!found.has(code))found.set(code,label)});return [{code:'ALL',label:'전체'},...[...found].map(([code,label])=>({code,label}))]}
 function siteCategoryValue(x){return String(x.Company||x.Category||x.SubCategory||'').trim()||'미분류'}
 function siteCategories(){const found=[...new Set(db.sites.filter(x=>isActive(x)&&state.siteType!=='ALL'&&siteTypeCode(x)===state.siteType).map(siteCategoryValue))].sort((a,b)=>a.localeCompare(b,'ko'));return [{code:'ALL',label:'전체'},...found.map(value=>({code:value,label:value}))]}
 function siteMatchesFilters(x){return (state.siteType==='ALL'||siteTypeCode(x)===state.siteType)&&(state.siteCategory==='ALL'||siteCategoryValue(x)===state.siteCategory)}
