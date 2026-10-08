@@ -30,10 +30,10 @@ function syncIndexCode(){
 }
 
 function latestIndexFile_(){
-  let latest=null,files=DriveApp.getFolderById(INDEX_SOURCE.folderId).getFilesByName(INDEX_SOURCE.fileName);
+  let latest=null,latestUpdated=0,files=DriveApp.getFolderById(INDEX_SOURCE.folderId).getFilesByName(INDEX_SOURCE.fileName);
   while(files.hasNext()){
-    const file=files.next();
-    if(!latest||file.getLastUpdated().getTime()>latest.getLastUpdated().getTime())latest=file;
+    const file=files.next(),updated=file.getLastUpdated().getTime();
+    if(updated>latestUpdated){latest=file;latestUpdated=updated}
   }
   return latest||DriveApp.getFileById(INDEX_SOURCE.fallbackFileId);
 }
@@ -57,7 +57,7 @@ function parseIndexRows_(values){
 }
 
 function reconcileIndexRows_(sheet,sourceRows){
-  const lastRow=sheet.getLastRow(),lastColumn=Math.max(sheet.getMaxColumns(),9),values=lastRow>1?sheet.getRange(2,1,lastRow-1,9).getDisplayValues():[];
+  const lastRow=sheet.getLastRow(),lastColumn=Math.max(sheet.getLastColumn(),9),values=lastRow>1?sheet.getRange(2,1,lastRow-1,9).getDisplayValues():[];
   const targets=values.map((row,i)=>({sheetRow:i+2,id:row[0],product:row[1],previous:row[2],paper:row[7],company:row[8]}));
   const aliasMap=new Map();
   sourceRows.forEach(source=>source.aliases.forEach(alias=>{const key=indexNorm_(alias),list=aliasMap.get(key)||[];list.push(source);aliasMap.set(key,list)}));
