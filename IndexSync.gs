@@ -69,8 +69,6 @@ function reconcileIndexRows_(sheet,sourceRows){
     if(matched.length){
       const sameCompany=matched.filter(item=>indexCompanyNorm_(item.company)===indexCompanyNorm_(target.company));
       if(sameCompany.length)matched=sameCompany;
-      const sharedNames=matched.filter(item=>item.aliases.some(alias=>keySet.has(indexNorm_(alias))));
-      if(sharedNames.length)matched=sharedNames;
     }else{
       keys.forEach(key=>(aliasMap.get(key)||[]).forEach(item=>{if(!matched.includes(item))matched.push(item)}));
       if(matched.length>1){const sameCompany=matched.filter(item=>indexCompanyNorm_(item.company)===indexCompanyNorm_(target.company));if(sameCompany.length)matched=sameCompany;}
