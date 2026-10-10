@@ -75,12 +75,12 @@ test('multiple index products with one paper create one row with line breaks and
   assert.equal(sheet.value(2,'Active'),'FALSE');assert.equal(sheet.colors[2],'#D9EAD3');
   const before=JSON.stringify(sheet.data);run(sheet,rows,[image('0001')]);assert.equal(JSON.stringify(sheet.data),before);
 });
-test('same-paper aliases normalize legacy delimiters and current names leave history',()=>{
+test('same-paper aliases normalize delimiters without overriding manual current/history classification',()=>{
   const sheet=new Sheet([{LPM_ID:'LPM-585',PaperNumber:'SCS481',ProductName:'N207',PreviousNames:'N107, S873, N109',BasePaperCompany:'송창',Active:'TRUE'}]);
   const sources=[src('SCS481','N207',['S873','N107'],'송창'),src('SCS481','N109',[],'송창')];
   run(sheet,sources,[]);
-  assert.equal(sheet.value(2,'ProductName'),'N207\nN109');
-  assert.equal(sheet.value(2,'PreviousNames'),'N107\nS873');
+  assert.equal(sheet.value(2,'ProductName'),'N207');
+  assert.equal(sheet.value(2,'PreviousNames'),'N107\nS873\nN109');
   assert.equal(sheet.value(2,'Active'),'TRUE');
   const before=JSON.stringify(sheet.data);run(sheet,sources,[]);assert.equal(JSON.stringify(sheet.data),before);
 });
@@ -250,4 +250,19 @@ test('newest XLS/XLSX source is selected without fallback to unrelated files',()
   ctx.DriveApp={getFolderById:()=>({getFiles:()=>({hasNext:()=>pos<files.length,next(){const [name,time]=files[pos++];return {getName:()=>name,getId:()=>name,getLastUpdated:()=>new Date(time)}}})})};
   assert.equal(ctx.latestIndexFile_().getName(),'인덱스코드.xlsx');
   assert.throws(()=>ctx.latestIndexFile_(),/파일이 없습니다/);
+});
+
+for(const [paper,current,previous,incoming] of [
+  ['SCS481','N207\nN109','N107\nS873',['N207','N109']],
+  ['SC1006-082','N686\nN724\nN693','',['N686','N693','N724']],
+  ['CR120-W-11','N916\nN711\nN727','N704',['N916','N711','N727']]
+])test(`manually consolidated ${paper} creates no duplicate, warning or green row`,()=>{
+  const sheet=new Sheet([{LPM_ID:'LPM-existing',PaperNumber:paper,ProductName:current,PreviousNames:previous,BasePaperCompany:'Company'}]);
+  const result=run(sheet,incoming.map(name=>src(paper,name,previous.split('\n').filter(Boolean))));
+  assert.equal(sheet.getLastRow(),2);
+  assert.equal(sheet.value(2,'ProductName'),current);
+  assert.equal(sheet.value(2,'PreviousNames'),previous);
+  assert.equal(result.addedCount,0);assert.equal(result.updatedCount,0);
+  assert.equal(sheet.value(2,'자동화 상태'),'');
+  assert.ok(!Object.values(sheet.colors).includes('#D9EAD3'));
 });

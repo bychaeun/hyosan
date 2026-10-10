@@ -135,7 +135,7 @@ function setUserStatus_(admin,email,status){
 function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관리자 권한이 필요합니다.','ADMIN_REQUIRED')}
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
-const DATA_CACHE_PREFIX='library-data-v9-';
+const DATA_CACHE_PREFIX='library-data-v10-';
 function readDataCache_(cache){
   try{
     const meta=JSON.parse(cache.get(DATA_CACHE_PREFIX+'meta')||'null');if(!meta||!meta.count)return null;
@@ -162,13 +162,10 @@ function rowsFromValues_(values){
   });
 }
 function readSheetsBatch_(names){
-  const query=names.map(name=>'ranges='+encodeURIComponent("'"+String(name).replace(/'/g,"''")+"'")).join('&');
-  const url='https://sheets.googleapis.com/v4/spreadsheets/'+encodeURIComponent(SPREADSHEET_ID)+'/values:batchGet?'+query+'&valueRenderOption=FORMATTED_VALUE&majorDimension=ROWS';
-  const response=UrlFetchApp.fetch(url,{method:'get',headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()},muteHttpExceptions:true});
-  const code=response.getResponseCode();
-  if(code!==200)throw new Error('Google Sheets 일괄 읽기 실패 ('+code+'): '+response.getContentText().slice(0,300));
-  const ranges=(JSON.parse(response.getContentText()).valueRanges||[]),result={};
-  names.forEach((name,i)=>{result[name]=rowsFromValues_((ranges[i]&&ranges[i].values)||[])});
+  // Apps Script's native service uses the existing spreadsheet authorization;
+  // it does not require enabling the separate Sheets REST API in a Cloud project.
+  const ss=SpreadsheetApp.openById(SPREADSHEET_ID),result={};
+  [...new Set(names)].forEach(name=>{result[name]=readSheet_(ss,name)});
   return result;
 }
 function getAllData_(forceRefresh){
@@ -214,8 +211,7 @@ function getAllData_(forceRefresh){
 function readSheet_(ss,name){
   const sh=ss.getSheetByName(name);if(!sh)return [];
   const lastRow=sh.getLastRow(),lastColumn=sh.getLastColumn();if(lastRow<2||lastColumn<1)return [];
-  const values=sh.getRange(1,1,lastRow,lastColumn).getDisplayValues(),headers=values[0];
-  return values.slice(1).filter(r=>r.some(v=>v!=='')).map(r=>{const item={};headers.forEach((h,i)=>{if(h&&r[i]!=='')item[h]=r[i]});return item});
+  return rowsFromValues_(sh.getRange(1,1,lastRow,lastColumn).getDisplayValues());
 }
 
 function getLpmsForExport_(lpmIds){

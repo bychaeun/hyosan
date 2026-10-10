@@ -249,10 +249,15 @@ function lpmDriveId_(url){
 function indexMapAdd_(map,key,item){if(!key)return;const list=map.get(key)||[];if(!list.includes(item))list.push(item);map.set(key,list)}
 function indexUniqueNames_(names){const seen=new Set();return names.filter(name=>{const key=indexNorm_(name);if(!key||seen.has(key))return false;seen.add(key);return true})}
 function mergeIndexNames_(oldCurrent,oldPrevious,current,previous){
-  const names=indexUniqueNames_([...splitIndexNames_(oldCurrent),...current.flatMap(splitIndexNames_)]);
-  const currentKeys=new Set(names.map(indexNorm_));
-  const history=indexUniqueNames_([...splitIndexNames_(oldPrevious),...previous.flatMap(splitIndexNames_)])
-    .filter(name=>!currentKeys.has(indexNorm_(name)));
+  // The user's existing current/history classification is authoritative.
+  // A name already in either column must never be moved to the other column.
+  const names=indexUniqueNames_(splitIndexNames_(oldCurrent));
+  const history=indexUniqueNames_(splitIndexNames_(oldPrevious));
+  const seen=new Set([...names,...history].map(indexNorm_));
+  const append=(target,values)=>values.flatMap(splitIndexNames_).forEach(name=>{
+    const key=indexNorm_(name);if(key&&!seen.has(key)){target.push(name);seen.add(key)}
+  });
+  append(names,current);append(history,previous);
   return {current:names.join('\n'),previous:history.join('\n')};
 }
 function splitIndexNames_(value){return String(value||'').split(/[\r\n,;|]+/).map(v=>v.trim()).filter(Boolean)}
