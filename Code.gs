@@ -135,7 +135,7 @@ function setUserStatus_(admin,email,status){
 function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관리자 권한이 필요합니다.','ADMIN_REQUIRED')}
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
-const DATA_CACHE_PREFIX='library-data-v8-';
+const DATA_CACHE_PREFIX='library-data-v9-';
 function readDataCache_(cache){
   try{
     const meta=JSON.parse(cache.get(DATA_CACHE_PREFIX+'meta')||'null');if(!meta||!meta.count)return null;
@@ -183,11 +183,14 @@ function getAllData_(forceRefresh){
   out.lpm.forEach(item=>{delete item.RelatedPattern_IDs;delete item.EmbossPlate_IDs});
   const relationIds_=value=>String(value||'').split(/[\r\n,;|]+/).map(v=>v.trim()).filter(Boolean);
   const relationKey_=value=>String(value||'').trim().toLocaleLowerCase().replace(/\s+/g,' ');
-  const nameLookup_=(items,nameFields,idField)=>{
+  const nameLookup_=(items,nameFields,idField,splitAliases=false)=>{
     const lookup=new Map();
     items.forEach(item=>nameFields.forEach(field=>{
-      const key=relationKey_(item[field]);if(!key)return;const id=String(item[idField]||'').trim();
-      if(!id)return;const ids=lookup.get(key)||[];if(!ids.includes(id))ids.push(id);lookup.set(key,ids);
+      const id=String(item[idField]||'').trim();if(!id)return;
+      const aliases=splitAliases?relationIds_(item[field]):[item[field]];
+      aliases.forEach(alias=>{const key=relationKey_(alias);if(!key)return;
+        const ids=lookup.get(key)||[];if(!ids.includes(id))ids.push(id);lookup.set(key,ids);
+      });
     }));
     return lookup;
   };
@@ -198,7 +201,7 @@ function getAllData_(forceRefresh){
   const lpmById=new Map(out.lpm.map(item=>[String(item.LPM_ID||'').trim(),item]));
   const embossById=new Map(out.emboss.map(item=>[String(item.EmbossPlate_ID||'').trim(),item]));
   const patternsByName=nameLookup_(out.patterns,['PatternName_KR','PatternName_EN'],'ID');
-  const lpmByName=nameLookup_(out.lpm,['ProductName'],'LPM_ID');
+  const lpmByName=nameLookup_(out.lpm,['ProductName','PreviousNames'],'LPM_ID',true);
   const embossByName=nameLookup_(out.emboss,['PlateName'],'EmbossPlate_ID');
   (tables.RELATIONS||[]).forEach(relation=>{
     const patternIds=resolveRelationIds_(relationValue_(relation,['Pattern_Name','PatternName','Pattern_ID']),patternsById,patternsByName),lpmIds=resolveRelationIds_(relationValue_(relation,['LPM_ProductName','LPM_Name','ProductName','LPM_ID']),lpmById,lpmByName),embossIds=resolveRelationIds_(relationValue_(relation,['EmbossPlate_Name','PlateName','EmbossPlate_ID']),embossById,embossByName);

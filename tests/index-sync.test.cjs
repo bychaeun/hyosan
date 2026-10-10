@@ -9,7 +9,7 @@ const headers=['LPM_ID','ProductName','PreviousNames','SampleBook','Category','O
 class Sheet{
   constructor(records=[],names=headers){
     this.data=[names.slice(),...records.map(record=>names.map(name=>record[name]??''))];
-    this.maxRows=this.data.length;this.maxColumns=names.length;this.writes=0;this.colors={};
+    this.maxRows=this.data.length;this.maxColumns=names.length;this.writes=0;this.colors={};this.colorCalls=0;
   }
   getLastRow(){return this.data.length}
   getLastColumn(){return this.data[0].length}
@@ -17,6 +17,12 @@ class Sheet{
   getMaxRows(){return this.maxRows}
   insertColumnsAfter(n,count){this.maxColumns+=count}
   insertRowsAfter(n,count){this.maxRows+=count}
+  getRangeList(ranges){
+    return {setBackground:color=>{
+      this.colorCalls++;
+      ranges.forEach(range=>{const match=range.match(/^A(\d+):[A-Z]+(\d+)$/);assert.ok(match);assert.equal(match[1],match[2]);this.colors[Number(match[1])]=color});
+    }};
+  }
   getRange(row,col,height=1,width=1){
     assert.ok(row+height-1<=this.maxRows,'range exceeds row capacity');
     assert.ok(col+width-1<=this.maxColumns,'range exceeds column capacity');
@@ -40,7 +46,7 @@ class Sheet{
   value(row,name){return this.data[row-1][this.data[0].indexOf(name)]??''}
 }
 const src=(paper,current,previous=[],company='Company')=>({paper,current,previous,company});
-const image=(paper,id='file1')=>({paper,id});
+const image=(name,id='file1')=>({name,id});
 const run=(sheet,rows=[],images=[])=>context.reconcileLpmRows_(sheet,rows,images);
 
 test('existing newline names preserved; missing products/history/company and images added',()=>{
@@ -68,6 +74,29 @@ test('multiple index products with one paper create one row with line breaks and
   assert.equal(sheet.value(2,'PreviousNames'),'Old');assert.equal(sheet.value(2,'PaperNumber'),'0001');
   assert.equal(sheet.value(2,'Active'),'FALSE');assert.equal(sheet.colors[2],'#D9EAD3');
   const before=JSON.stringify(sheet.data);run(sheet,rows,[image('0001')]);assert.equal(JSON.stringify(sheet.data),before);
+});
+test('same-paper aliases normalize legacy delimiters and current names leave history',()=>{
+  const sheet=new Sheet([{LPM_ID:'LPM-585',PaperNumber:'SCS481',ProductName:'N207',PreviousNames:'N107, S873, N109',BasePaperCompany:'송창',Active:'TRUE'}]);
+  const sources=[src('SCS481','N207',['S873','N107'],'송창'),src('SCS481','N109',[],'송창')];
+  run(sheet,sources,[]);
+  assert.equal(sheet.value(2,'ProductName'),'N207\nN109');
+  assert.equal(sheet.value(2,'PreviousNames'),'N107\nS873');
+  assert.equal(sheet.value(2,'Active'),'TRUE');
+  const before=JSON.stringify(sheet.data);run(sheet,sources,[]);assert.equal(JSON.stringify(sheet.data),before);
+});
+test('existing comma-separated product aliases become unique lines even without new names',()=>{
+  const sheet=new Sheet([{LPM_ID:'LPM-785',PaperNumber:'SC1006-082',ProductName:'N686, N724, N693, n686',PreviousNames:'Older; Older|Oldest'}]);
+  run(sheet,[src('SC1006-082','N686'),src('SC1006-082','N693'),src('SC1006-082','N724')],[]);
+  assert.equal(sheet.value(2,'ProductName'),'N686\nN724\nN693');
+  assert.equal(sheet.value(2,'PreviousNames'),'Older\nOldest');
+});
+test('current name in another same-paper row is not repeated in history',()=>{
+  const sheet=new Sheet();
+  run(sheet,[src('0012','Latest',['Earlier','Alias']),src('0012','Alias',['Older'])],[]);
+  assert.equal(sheet.value(2,'ProductName'),'Latest\nAlias');
+  assert.equal(sheet.value(2,'PreviousNames'),'Earlier\nOlder');
+  run(sheet,[src('12','Separate')],[]);
+  assert.equal(sheet.getLastRow(),3);
 });
 test('image without sheet paper creates a review row and keeps warning on later runs',()=>{
   const sheet=new Sheet();run(sheet,[],[image('0002')]);
@@ -104,6 +133,62 @@ test('existing Drive URL is deduplicated by file ID; unrelated URLs preserved',(
   const sheet=new Sheet([{LPM_ID:'LPM-001',PaperNumber:'A',ImageURL:'https://drive.google.com/thumbnail?id=file1&sz=w1600\nhttps://example.com/image.png'}]);
   run(sheet,[],[image('A')]);assert.equal(sheet.value(2,'ImageURL').split('\n').length,2);
 });
+test('replacement upload with a new Drive ID adds once and preserves earlier image links',()=>{
+  const sheet=new Sheet([{LPM_ID:'LPM-001',PaperNumber:'0012',ImageURL:'https://drive.google.com/file/d/old/view',Active:'TRUE'}]);
+  run(sheet,[],[image('0012','old'),image('0012','replacement')]);
+  assert.equal(sheet.value(2,'ImageURL').split('\n').length,2);
+  const before=JSON.stringify(sheet.data);
+  run(sheet,[],[image('0012','replacement')]);
+  assert.equal(JSON.stringify(sheet.data),before);assert.equal(sheet.value(2,'Active'),'TRUE');
+});
+test('paper, current alias, previous alias and legacy FULL image names all link to one product',()=>{
+  const sheet=new Sheet([{LPM_ID:'LPM-001',PaperNumber:'SM8025I',ProductName:'N436\nN437',PreviousNames:'S100',Active:'TRUE'}]);
+  const images=[image('SM8025I','paper'),image('N437','current'),image('S100','previous'),image('N436-FULL','legacy')];
+  const result=run(sheet,[],images);
+  assert.equal(sheet.getLastRow(),2);assert.equal(sheet.value(2,'ImageURL').split('\n').length,4);
+  assert.equal(result.imageMatchedByPaperCount,1);assert.equal(result.imageMatchedByNameCount,3);
+  assert.equal(result.imageUpdatedCount,1);assert.equal(result.imageOnlyAddedCount,0);
+  const before=JSON.stringify(sheet.data);const second=run(sheet,[],images);
+  assert.equal(JSON.stringify(sheet.data),before);assert.equal(second.imageUpdatedCount,0);
+});
+test('same product name on different paper numbers is flagged without attaching the image',()=>{
+  const sheet=new Sheet([{LPM_ID:'LPM-001',PaperNumber:'A',ProductName:'Shared'},{LPM_ID:'LPM-002',PaperNumber:'B',ProductName:'Shared'}]);
+  const result=run(sheet,[],[image('Shared')]);
+  assert.equal(result.ambiguousImageCount,1);assert.equal(sheet.getLastRow(),3);
+  assert.equal(sheet.value(2,'ImageURL'),'');assert.equal(sheet.value(3,'ImageURL'),'');
+  assert.match(sheet.value(2,'자동화 상태'),/여러 종이넘버/);
+});
+test('exact paper match takes precedence over another product name',()=>{
+  const sheet=new Sheet([{LPM_ID:'LPM-001',PaperNumber:'N436',ProductName:'First'},{LPM_ID:'LPM-002',PaperNumber:'B',ProductName:'N436'}]);
+  run(sheet,[],[image('N436')]);
+  assert.match(sheet.value(2,'ImageURL'),/file1/);assert.equal(sheet.value(3,'ImageURL'),'');
+});
+test('image name matches aliases just imported from overwritten index data',()=>{
+  const sheet=new Sheet();
+  run(sheet,[src('0001','N100'),src('0001','N101',['Old100'])],[image('N101')]);
+  assert.equal(sheet.getLastRow(),2);assert.equal(sheet.value(2,'PaperNumber'),'0001');
+  assert.match(sheet.value(2,'ImageURL'),/file1/);
+});
+test('name image uploaded before index later attaches to the real product rather than its placeholder',()=>{
+  const sheet=new Sheet();run(sheet,[],[image('N101')]);
+  run(sheet,[src('0001','N101')],[image('N101')]);
+  assert.equal(sheet.getLastRow(),3);
+  assert.equal(sheet.value(3,'PaperNumber'),'0001');assert.match(sheet.value(3,'ImageURL'),/file1/);
+  assert.equal(sheet.value(2,'Active'),'FALSE');
+});
+test('formatting hundreds of changed rows uses one call per color',()=>{
+  const sheet=new Sheet();
+  run(sheet,Array.from({length:300},(_,i)=>src(String(i),'Name '+i)),[]);
+  assert.equal(sheet.getLastRow(),301);assert.equal(sheet.colorCalls,1);
+  assert.equal(context.indexColumnLabel_(27),'AA');
+});
+test('overwriting index content adds revised aliases on the next sync without another row',()=>{
+  const sheet=new Sheet();run(sheet,[src('0012','Original')],[]);
+  run(sheet,[src('0012','Updated',['Old']),src('0012','Another')],[]);
+  assert.equal(sheet.getLastRow(),2);
+  assert.equal(sheet.value(2,'ProductName'),'Original\nUpdated\nAnother');
+  assert.equal(sheet.value(2,'PreviousNames'),'Old');
+});
 test('failed index read still allows images; failed image read preserves prior images/status',()=>{
   const sheet=new Sheet();run(sheet,null,[image('A')]);
   const old=sheet.value(2,'ImageURL');run(sheet,[src('A','New')],null);
@@ -128,7 +213,7 @@ test('image reader uses full paper filename without extension and skips non-imag
   let pos=0;
   context.DriveApp={getFolderById(id){assert.equal(id,'1TgLqm-7qjsDqtSEXVFnPM3cC9shPxGSR');return {getFiles(){return {hasNext:()=>pos<files.length,next(){const [name,mime,id]=files[pos++];return {getName:()=>name,getMimeType:()=>mime,getId:()=>id}}}}}}};
   const result=context.readLpmImages_();assert.equal(result.length,2);
-  assert.equal(result[0].paper,'0012');assert.equal(result[1].paper,'AB.12');
+  assert.equal(result[0].name,'0012');assert.equal(result[1].name,'AB.12');
 });
 
 test('complete sync records partial failure, invalidates cache and always cleans up and unlocks',()=>{

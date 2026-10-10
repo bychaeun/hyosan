@@ -29,6 +29,8 @@ function syncIndexCode(){
     try{images=readLpmImages_()}catch(e){errors.push('이미지: '+e.message)}
     const result=reconcileLpmRows_(sheet,sourceRows,images);
     result.ok=errors.length===0;result.errors=errors;result.syncedAt=new Date().toISOString();
+    result.sourceRowCount=sourceRows===null?null:sourceRows.length;
+    result.imageFileCount=images===null?null:images.length;
     SpreadsheetApp.flush();
     clearLibraryDataCache_();
     PropertiesService.getScriptProperties().setProperties({
@@ -79,8 +81,8 @@ function readLpmImages_(){
   while(files.hasNext()){
     const file=files.next();
     if(!/^image\//i.test(file.getMimeType()))continue;
-    const paper=file.getName().replace(/\.(?:jpe?g|png|webp|gif|bmp|tiff?|heic|heif|avif|svg)$/i,'').trim();
-    if(paper)images.push({paper:paper,id:file.getId()});
+    const name=file.getName().replace(/\.(?:jpe?g|png|webp|gif|bmp|tiff?|heic|heif|avif|svg)$/i,'').trim();
+    if(name)images.push({name:name,id:file.getId()});
   }
   return images.sort((a,b)=>a.id.localeCompare(b.id));
 }
@@ -105,7 +107,8 @@ function reconcileLpmRows_(sheet,sourceRows,images){
   const set=(row,key,value)=>{row[cols[key]-1]=value};
   rows.forEach((row,i)=>{const key=indexNorm_(get(row,'PaperNumber'));if(key)indexMapAdd_(byPaper,key,i)});
   let nextId=rows.reduce((n,row)=>Math.max(n,Number((String(get(row,'LPM_ID')).match(/(\d+)$/)||[])[1]||0)),0)+1;
-  const result={ok:true,addedCount:0,updatedCount:0,imageUpdatedCount:0,imageOnlyAddedCount:0,ambiguousCount:0,skippedIndexRows:0};
+  const result={ok:true,addedCount:0,updatedCount:0,imageUpdatedCount:0,imageOnlyAddedCount:0,ambiguousCount:0,skippedIndexRows:0,
+    imageMatchedByPaperCount:0,imageMatchedByNameCount:0,ambiguousImageCount:0};
   const newRow=paper=>{
     const row=Array(width).fill(''),i=rows.length;
     set(row,'LPM_ID','LPM-'+String(nextId++).padStart(3,'0'));set(row,'PaperNumber',paper);set(row,'Active','FALSE');
@@ -141,16 +144,12 @@ function reconcileLpmRows_(sheet,sourceRows,images){
           status(row,'인덱스','내용 확인 필요 · 같은 종이넘버의 종이회사 충돌: '+companies.join(' / '));
           colors.set(i,INDEX_COLORS.ambiguous);result.ambiguousCount++;return;
         }
-        // Preserve manually entered names and their order, including newline-separated exceptions.
+        // Group by paper number, retain manual aliases and normalize each name to its own line.
         const products=indexUniqueNames_(matches.flatMap(item=>splitIndexNames_(item.current)));
         const previous=indexUniqueNames_(matches.flatMap(item=>item.previous));
-        const merge=(old,extra)=>{
-          const seen=new Set(splitIndexNames_(old).map(indexNorm_));
-          const missing=extra.filter(name=>!seen.has(indexNorm_(name)));
-          return missing.length?[String(old||'').trim(),...missing].filter(Boolean).join('\n'):old;
-        };
-        set(row,'ProductName',merge(get(row,'ProductName'),products));
-        set(row,'PreviousNames',merge(get(row,'PreviousNames'),previous));
+        const names=mergeIndexNames_(get(row,'ProductName'),get(row,'PreviousNames'),products,previous);
+        set(row,'ProductName',names.current);
+        set(row,'PreviousNames',names.previous);
         if(!company&&companies.length)set(row,'BasePaperCompany',companies[0]);
         const fields=['ProductName','PreviousNames','BasePaperCompany'].filter(name=>get(before,name)!==get(row,name));
         if(fields.length){
@@ -164,11 +163,39 @@ function reconcileLpmRows_(sheet,sourceRows,images){
     });
   }
   if(images!==null){
-    const groups=new Map();
-    images.forEach(image=>indexMapAdd_(groups,indexNorm_(image.paper),image));
+    const groups=new Map(),byName=new Map(),changedImages=new Set();
+    rows.forEach((row,i)=>{
+      [...splitIndexNames_(get(row,'ProductName')),...splitIndexNames_(get(row,'PreviousNames'))]
+        .forEach(name=>indexMapAdd_(byName,indexNorm_(name),i));
+      status(row,'이미지 확인','');
+    });
+    images.forEach(image=>indexMapAdd_(groups,indexNorm_(image.name||image.paper),image));
     groups.forEach((group,key)=>{
       if(!key)return;
-      const missing=!byPaper.has(key),indices=missing?[newRow(group[0].paper)]:byPaper.get(key);
+      const aliases=byName.get(key)||byName.get(key.replace(/[-_]FULL$/i,''));
+      let indices=byPaper.get(key),missing=false;
+      // An image-only review row has a filename candidate, not a verified paper.
+      // Prefer the real product when its name is later registered in the index.
+      if(aliases&&indices&&indices.every(i=>!get(rows[i],'ProductName')&&
+        String(get(rows[i],'Active')).toUpperCase()==='FALSE'&&String(rows[i][12]).includes('[이미지] 내용 확인 필요')))indices=null;
+      if(indices){result.imageMatchedByPaperCount+=group.length}
+      else{
+        // Exact product/history name first; -FULL is a known legacy image suffix.
+        indices=aliases;
+        if(indices){
+          const papers=new Set(indices.map(i=>indexNorm_(get(rows[i],'PaperNumber'))||'ROW:'+i));
+          if(papers.size>1){
+            result.ambiguousImageCount+=group.length;
+            indices.forEach(i=>{status(rows[i],'이미지 확인','내용 확인 필요 · 파일명 '+(group[0].name||group[0].paper)+'이 여러 종이넘버에 일치');colors.set(i,INDEX_COLORS.ambiguous)});
+            return;
+          }
+          result.imageMatchedByNameCount+=group.length;
+        }else{
+          // Preserve the existing review-row workflow for previously unseen files.
+          // The filename is only a paper-number candidate until manually reviewed.
+          missing=true;indices=[newRow(group[0].name||group[0].paper)];
+        }
+      }
       if(missing)result.imageOnlyAddedCount++;
       indices.forEach(i=>{
         const row=rows[i],old=get(row,'ImageURL');
@@ -176,7 +203,7 @@ function reconcileLpmRows_(sheet,sourceRows,images){
         const ids=new Set(urls.map(lpmDriveId_).filter(Boolean));
         group.forEach(image=>{if(!ids.has(image.id)){urls.push('https://drive.google.com/file/d/'+image.id+'/view');ids.add(image.id)}});
         if(urls.join('\n')!==old){
-          set(row,'ImageURL',urls.join('\n'));result.imageUpdatedCount++;
+          set(row,'ImageURL',urls.join('\n'));changedImages.add(i);
           if(!colors.has(i))colors.set(i,INDEX_COLORS.changed);
         }
         const pending=missing||!get(row,'ProductName')||String(row[12]).includes('[이미지] 내용 확인 필요');
@@ -184,6 +211,7 @@ function reconcileLpmRows_(sheet,sourceRows,images){
         if(pending)colors.set(i,INDEX_COLORS.ambiguous);
       });
     });
+    result.imageUpdatedCount=changedImages.size;
   }
   if(sheet.getMaxColumns()<width)sheet.insertColumnsAfter(sheet.getMaxColumns(),width-sheet.getMaxColumns());
   if(sheet.getMaxRows()<rows.length+1)sheet.insertRowsAfter(sheet.getMaxRows(),rows.length+1-sheet.getMaxRows());
@@ -207,15 +235,26 @@ function reconcileLpmRows_(sheet,sourceRows,images){
     });
     flush();
   });
-  colors.forEach((color,i)=>sheet.getRange(i+2,1,1,width).setBackground(color));
+  // At most one Sheets formatting call per color, instead of one per product.
+  const colorRanges=new Map();
+  colors.forEach((color,i)=>indexMapAdd_(colorRanges,color,'A'+(i+2)+':'+indexColumnLabel_(width)+(i+2)));
+  colorRanges.forEach((ranges,color)=>sheet.getRangeList(ranges).setBackground(color));
   return result;
 }
+function indexColumnLabel_(column){let label='';for(;column>0;column=Math.floor((column-1)/26))label=String.fromCharCode(65+(column-1)%26)+label;return label}
 function lpmDriveId_(url){
   const match=String(url).match(/^https:\/\/(?:drive\.google\.com|drive\.usercontent\.google\.com)\/(?:file\/d\/([^/?#]+)|[^#]*[?&]id=([^&#]+))/i);
   return match?(match[1]||match[2]):'';
 }
 function indexMapAdd_(map,key,item){if(!key)return;const list=map.get(key)||[];if(!list.includes(item))list.push(item);map.set(key,list)}
 function indexUniqueNames_(names){const seen=new Set();return names.filter(name=>{const key=indexNorm_(name);if(!key||seen.has(key))return false;seen.add(key);return true})}
+function mergeIndexNames_(oldCurrent,oldPrevious,current,previous){
+  const names=indexUniqueNames_([...splitIndexNames_(oldCurrent),...current.flatMap(splitIndexNames_)]);
+  const currentKeys=new Set(names.map(indexNorm_));
+  const history=indexUniqueNames_([...splitIndexNames_(oldPrevious),...previous.flatMap(splitIndexNames_)])
+    .filter(name=>!currentKeys.has(indexNorm_(name)));
+  return {current:names.join('\n'),previous:history.join('\n')};
+}
 function splitIndexNames_(value){return String(value||'').split(/[\r\n,;|]+/).map(v=>v.trim()).filter(Boolean)}
 function indexNorm_(value){return String(value||'').normalize('NFKC').trim().replace(/\s+/g,'').toUpperCase()}
 function indexCompanyNorm_(value){return indexNorm_(value).replace(/\(주\)|㈜/g,'')}
