@@ -7,7 +7,7 @@ function installIndexSyncTrigger(){
   // Validate and perform the first synchronization before replacing the schedule.
   const result=syncIndexCode();
   const old=ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()==='syncIndexCode');
-  ScriptApp.newTrigger('syncIndexCode').timeBased().everyMinutes(30).create();
+  ScriptApp.newTrigger('syncIndexCode').timeBased().everyHours(1).create();
   old.forEach(t=>ScriptApp.deleteTrigger(t));
   return result;
 }
@@ -169,7 +169,7 @@ function reconcileLpmRows_(sheet,sourceRows,images){
         .forEach(name=>indexMapAdd_(byName,indexNorm_(name),i));
       status(row,'이미지 확인','');
     });
-    images.forEach(image=>indexMapAdd_(groups,indexNorm_(image.name||image.paper),image));
+    images.forEach(image=>{const key=indexImageKey_(image.name||image.paper,byPaper,byName);indexMapAdd_(groups,key,image)});
     groups.forEach((group,key)=>{
       if(!key)return;
       const aliases=byName.get(key)||byName.get(key.replace(/[-_]FULL$/i,''));
@@ -242,6 +242,7 @@ function reconcileLpmRows_(sheet,sourceRows,images){
   return result;
 }
 function indexColumnLabel_(column){let label='';for(;column>0;column=Math.floor((column-1)/26))label=String.fromCharCode(65+(column-1)%26)+label;return label}
+function indexImageKey_(name,byPaper,byName){const key=indexNorm_(name);if(byPaper.has(key)||byName.has(key))return key;return key.replace(/_\d+$/,'')}
 function lpmDriveId_(url){
   const match=String(url).match(/^https:\/\/(?:drive\.google\.com|drive\.usercontent\.google\.com)\/(?:file\/d\/([^/?#]+)|[^#]*[?&]id=([^&#]+))/i);
   return match?(match[1]||match[2]):'';

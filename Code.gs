@@ -22,9 +22,9 @@ function doPost(e){
       return jsonOutput(loginResponse);
     }
     const user=authenticateRequest_(body,cfg);
-    if(body.action==='sessionStatus')return jsonOutput(userResponse_(user));
+    if(body.action==='sessionStatus')return jsonOutput(renewSessionResponse_(body,user,userResponse_(user)));
     if(user.Status!=='ADMIN'&&user.Status!=='APPROVED')return jsonOutput(userResponse_(user));
-    if(body.action==='data')return jsonOutput(Object.assign(getAllData_(body.force===true),{user:userResponse_(user).user}));
+    if(body.action==='data')return jsonOutput(renewSessionResponse_(body,user,Object.assign(getAllData_(body.force===true),{user:userResponse_(user).user})));
     if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmIds||body.lpmId,user.Email,cfg));
     if(body.action==='listUsers')return jsonOutput(listUsers_(user));
     if(body.action==='setUserStatus')return jsonOutput(setUserStatus_(user,body.email,body.status));
@@ -49,6 +49,16 @@ function authenticateRequest_(body,cfg){
 function createSessionToken_(email){
   const payload=Utilities.base64EncodeWebSafe(JSON.stringify({email:String(email).toLowerCase(),exp:Date.now()+30*24*60*60*1000})).replace(/=+$/,''),signature=Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(payload,getSessionSecret_())).replace(/=+$/,'');
   return payload+'.'+signature;
+}
+
+// Keep the same 30-day signed session window; renew only after approval is checked.
+function renewSessionResponse_(body,user,response){
+  if(!user||!['ADMIN','APPROVED'].includes(user.Status)||!body.sessionToken)return response;
+  try{
+    const payload=JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(String(body.sessionToken).split('.')[0])).getDataAsString());
+    if(Number(payload.exp)-Date.now()<7*24*60*60*1000)response.sessionToken=createSessionToken_(user.Email);
+  }catch(e){}
+  return response;
 }
 
 function verifySessionToken_(token){
@@ -135,7 +145,7 @@ function setUserStatus_(admin,email,status){
 function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관리자 권한이 필요합니다.','ADMIN_REQUIRED')}
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
-const DATA_CACHE_PREFIX='library-data-v10-';
+const DATA_CACHE_PREFIX='library-data-v11-';
 function readDataCache_(cache){
   try{
     const meta=JSON.parse(cache.get(DATA_CACHE_PREFIX+'meta')||'null');if(!meta||!meta.count)return null;
@@ -149,7 +159,7 @@ function writeDataCache_(cache,data){
     const zipped=Utilities.gzip(Utilities.newBlob(JSON.stringify(data),'application/json')),encoded=Utilities.base64Encode(zipped.getBytes()),size=80000,values={};
     for(let i=0,n=0;i<encoded.length;i+=size,n++)values[DATA_CACHE_PREFIX+n]=encoded.slice(i,i+size);
     values[DATA_CACHE_PREFIX+'meta']=JSON.stringify({count:Math.ceil(encoded.length/size)});
-    cache.putAll(values,1800);
+    cache.putAll(values,3600);
   }catch(e){console.warn('Data cache skipped: '+e.message)}
 }
 function rowsFromValues_(values){

@@ -238,7 +238,7 @@ test('trigger replacement follows successful sync and retains other handlers',()
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../IndexSync.gs'),'utf8'),ctx);
   const calls=[],old={getHandlerFunction:()=>'syncIndexCode'},other={getHandlerFunction:()=>'other'};
   ctx.syncIndexCode=()=>{calls.push('sync');return {ok:true}};
-  ctx.ScriptApp={getProjectTriggers:()=>[old,other],deleteTrigger(t){assert.equal(t,old);calls.push('delete')},newTrigger(name){assert.equal(name,'syncIndexCode');return {timeBased(){return this},everyMinutes(n){assert.equal(n,30);return this},create(){calls.push('create')}}}};
+  ctx.ScriptApp={getProjectTriggers:()=>[old,other],deleteTrigger(t){assert.equal(t,old);calls.push('delete')},newTrigger(name){assert.equal(name,'syncIndexCode');return {timeBased(){return this},everyHours(n){assert.equal(n,1);return this},create(){calls.push('create')}}}};
   ctx.installIndexSyncTrigger();assert.deepEqual(calls,['sync','create','delete']);
   calls.length=0;ctx.syncIndexCode=()=>{throw new Error('sync failed')};
   assert.throws(()=>ctx.installIndexSyncTrigger(),/sync failed/);assert.deepEqual(calls,[]);

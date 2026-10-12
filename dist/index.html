@@ -15,6 +15,7 @@
 <link rel="icon" href="assets/hyosan-app-icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/hyosan-app-icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://script.google.com"><link rel="preconnect" href="https://script.googleusercontent.com"><link rel="preconnect" href="https://drive.google.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -98,13 +99,20 @@ const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbyiUawKvrT80mA7Cl
 const DATA_KEYS=['patterns','lpm','specialSpecs','emboss','sites'];
 let db={patterns:[],lpm:[],specialSpecs:[],emboss:[],sites:[],config:{}},state={patternCat:'ALL',lpmBook:'ALL',lpmCat:'ALL',specialMajor:'ALL',specialSub:'ALL',siteType:'ALL',siteCategory:'ALL',toolMode:'composer',composerLpmId:'',composerEmbossId:'',composerPickerType:'lpm',composerStrength:30,composerZoom:1,composerPanX:50,composerPanY:50,composerInvert:false,composerCandidateGroups:[[],[]],composerActiveGroup:-1,composerActiveCandidate:-1,selectedLpmIds:new Set(),selectedColorLpmIds:new Set(),visibleLpmIds:[],pPage:1,lPage:1,sPage:1,ePage:1,cPage:1,selectedHex:'#B3B3B3',wheelPoint:{h:0,ratio:0},modalImages:[],modalIndex:0,modalTitle:'',modalHistory:[],modalView:null},syncPromise=null,lastPayloadText='',appStarted=false,syncTimer=null;
 let indexes={patterns:new Map(),lpm:new Map(),specialSpecs:new Map(),emboss:new Map(),embossToLpm:new Map(),colors:[]},searchIndex=new WeakMap(),imageListCache=new Map(),installPrompt=null;
-const auth={required:false,clientId:'',idToken:'',sessionToken:localStorage.getItem('hyosan-session')||'',user:null};
+function readStoredSession(){try{return localStorage.getItem('hyosan-session')||''}catch(e){return ''}}
+const auth={required:false,clientId:'',idToken:'',sessionToken:readStoredSession(),user:null};
 let accessPromise=null;
 const $=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)],split=v=>String(v||'').split(/[\r\n,;|]+/).map(x=>x.trim()).filter(Boolean);
 let cacheDbPromise;
-const cacheDb=()=>cacheDbPromise||(cacheDbPromise=new Promise((resolve,reject)=>{const request=indexedDB.open('hyosan-library',1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('data'))request.result.createObjectStore('data')};request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)}).catch(error=>{cacheDbPromise=null;throw error}));
+const cacheDb=()=>cacheDbPromise||(cacheDbPromise=new Promise((resolve,reject)=>{const request=indexedDB.open('hyosan-library',1),timer=setTimeout(()=>reject(new Error('저장소 연결 지연')),3000);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('data'))request.result.createObjectStore('data')};request.onsuccess=()=>{clearTimeout(timer);resolve(request.result)};request.onerror=()=>{clearTimeout(timer);reject(request.error)};request.onblocked=()=>{clearTimeout(timer);reject(new Error('저장소 사용 중'))}}).catch(error=>{cacheDbPromise=null;throw error}));
 async function loadCachedData(){try{const store=(await cacheDb()).transaction('data','readonly').objectStore('data');return await new Promise((resolve,reject)=>{const r=store.get('latest');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}catch(e){return null}}
 async function saveCachedData(value){try{const store=(await cacheDb()).transaction('data','readwrite').objectStore('data');store.put(value,'latest')}catch(e){}}
+let sessionPersistence=Promise.resolve();
+function rememberSession(token){
+ auth.sessionToken=String(token||'');try{if(auth.sessionToken)localStorage.setItem('hyosan-session',auth.sessionToken);else localStorage.removeItem('hyosan-session')}catch(e){}
+ const value=auth.sessionToken;sessionPersistence=sessionPersistence.catch(()=>{}).then(async()=>{try{const store=(await cacheDb()).transaction('data','readwrite').objectStore('data');await new Promise((resolve,reject)=>{const request=value?store.put(value,'session'):store.delete('session');request.onsuccess=resolve;request.onerror=()=>reject(request.error)})}catch(e){}});return sessionPersistence;
+}
+async function restoreSession(){if(auth.sessionToken)return;try{await sessionPersistence;const store=(await cacheDb()).transaction('data','readonly').objectStore('data');const token=await new Promise((resolve,reject)=>{const r=store.get('session');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});if(token)rememberSession(token)}catch(e){}}
 function imageUrl(u){
  const raw=String(u||'').trim(),fallback='https://placehold.co/800x600/e7e2d9/555?text=No+Image';
  if(!/^https?:\/\//i.test(raw))return fallback;
@@ -119,7 +127,8 @@ function imageUrl(u){
 }
 function imageUrls(value){const values=Array.isArray(value)?value:[value],key=values.map(v=>String(v||'')).join('\u001f'),cached=imageListCache.get(key);if(cached)return cached;const urls=[...new Set(values.flatMap(v=>String(v||'').split(/[\r\n,;|]+/)).map(v=>v.trim()).filter(v=>/^https?:\/\//i.test(v)).map(imageUrl))],result=urls.length?urls:[imageUrl('')];imageListCache.set(key,result);return result}
 function modalImageUrl(value){try{const url=new URL(value);if(/(^|\.)drive\.google\.com$/i.test(url.hostname)&&url.pathname==='/thumbnail')url.searchParams.set('sz','w4096');return url.href}catch(e){return value}}
-const safeImg=u=>esc(imageUrls(u)[0]);
+function previewImageUrl(value){try{const url=new URL(value);if(url.hostname==='drive.google.com'&&url.pathname==='/thumbnail')url.searchParams.set('sz','w640');return url.href}catch(e){return value}}
+const safeImg=u=>esc(previewImageUrl(imageUrls(u)[0]));
 function driveFileId(value){try{const url=new URL(String(value||''));if(!/(^|\.)drive\.google\.com$/i.test(url.hostname)&&!/(^|\.)drive\.usercontent\.google\.com$/i.test(url.hostname))return '';const match=url.pathname.match(/^\/file\/d\/([^/]+)/);return (match&&match[1])||url.searchParams.get('id')||''}catch(e){return ''}}
 function triggerImageDownload(url,name){const link=document.createElement('a');link.href=url;link.download=(name||'HYOSAN').replace(/[\\/:*?"<>|]/g,'_');link.rel='noopener';document.body.appendChild(link);link.click();link.remove()}
 function setStatus(t,kind=''){const e=$('#syncStatus');e.textContent=t;e.className='status '+kind}
@@ -136,7 +145,7 @@ async function apiPost(action,extra={},timeoutMs=CONFIG.SYNC_TIMEOUT_MS,retry=tr
  for(let attempt=0,attempts=retry?2:1;attempt<attempts;attempt++){
   try{
    const r=await fetch(CONFIG.API_URL+'?ts='+Date.now(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8','Accept':'application/json'},body:JSON.stringify(body),cache:'no-store',redirect:'follow',signal:AbortSignal.timeout(timeoutMs)});
-   const j=await responseJson(r);if(j.ok===false)throw apiFailure(j);return j;
+   const j=await responseJson(r);if(j.ok===false)throw apiFailure(j);if(j.sessionToken)rememberSession(j.sessionToken);return j;
   }catch(error){lastError=error;if(attempt+1<attempts&&isTransientError(error)){await new Promise(resolve=>setTimeout(resolve,600));continue}throw error}
  }
  throw lastError;
@@ -155,7 +164,7 @@ async function syncData(force=false){
  if(!CONFIG.API_URL){setStatus('Apps Script URL 설정 필요','err');return}if(syncPromise)return syncPromise;
  syncPromise=(async()=>{try{
   setStatus('Google Sheets 동기화 중…');let j,payload;
-  if(auth.required||auth.user||auth.sessionToken||auth.idToken){j=await apiPost('data',force?{force:true}:{});payload=JSON.stringify(j)}else{const r=await fetch(CONFIG.API_URL+'?action=data&force='+(force?'true':'false')+'&ts='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(CONFIG.SYNC_TIMEOUT_MS)});if(!r.ok)throw new Error('HTTP '+r.status);payload=await r.text();j=JSON.parse(payload)}
+  if(auth.required||auth.user||auth.sessionToken||auth.idToken){j=await apiPost('data',force?{force:true}:{});delete j.sessionToken;payload=JSON.stringify(j)}else{const r=await fetch(CONFIG.API_URL+'?action=data&force='+(force?'true':'false')+'&ts='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(CONFIG.SYNC_TIMEOUT_MS)});if(!r.ok)throw new Error('HTTP '+r.status);payload=await r.text();j=JSON.parse(payload)}
   if(!Array.isArray(j.specialSpecs))j.specialSpecs=[];if(j.ok===false||!DATA_KEYS.every(k=>Array.isArray(j[k])))throw new Error(j.error||'잘못된 데이터 응답');if(payload!==lastPayloadText){db=j;lastPayloadText=payload;rebuildIndexes();renderActive();saveCachedData(j)}setStatus('최신 Google Sheets 반영 · '+new Date().toLocaleTimeString(),'ok')
  }catch(e){if(['INVALID_SESSION','USER_NOT_FOUND','AUTH_REQUIRED','APPROVAL_PENDING','ACCESS_REVOKED'].includes(e.code)){clearSession();setStatus('로그인 갱신이 필요합니다. 다시 로그인해 주세요.','err');setTimeout(()=>location.reload(),400)}else if(isTransientError(e)){setStatus('서버 연결 지연 · 저장된 데이터를 표시 중입니다.','')}else setStatus('동기화 실패 · '+e.message,'err')}})().finally(()=>{syncPromise=null});return syncPromise;
 }
@@ -406,17 +415,18 @@ $('#modal').addEventListener('close',()=>{closeImageFullView();state.modalHistor
 
 const searchInput=$('#search'),clearSearchButton=$('#clearSearch');function updateSearchClear(){clearSearchButton.hidden=!searchInput.value}searchInput.addEventListener('input',updateSearchClear);clearSearchButton.onclick=()=>{clearTimeout(searchDelay);searchInput.value='';updateSearchClear();searchInput.dispatchEvent(new Event('input',{bubbles:true}));searchInput.focus()};updateSearchClear();
 function restartSyncTimer(){if(syncTimer)clearInterval(syncTimer);syncTimer=setInterval(()=>{if(!document.hidden)syncData()},CONFIG.SYNC_MS)}
-function startApp(user=null){
+function startApp(user=null,initialData=null){
  if(appStarted)return;appStarted=true;auth.user=user;if(user)auth.required=true;$('#accessGate').hidden=true;document.body.classList.remove('access-locked');
  const isAdmin=!!(user&&user.isAdmin),adminButton=$('#userAdminButton'),adminDialog=$('#userDialog');adminButton.hidden=!isAdmin;adminDialog.hidden=!isAdmin;adminDialog.setAttribute('aria-hidden',String(!isAdmin));$('#logoutButton').hidden=!auth.required;
- loadCachedData().then(cached=>{if(cached&&DATA_KEYS.every(k=>Array.isArray(cached[k]))){db=cached;rebuildIndexes();renderActive();setStatus('저장된 데이터를 표시했습니다. 최신 내용을 확인 중…')}}).finally(syncData);restartSyncTimer();$('#search').focus();
+ if(initialData&&DATA_KEYS.every(k=>Array.isArray(initialData[k]))){delete initialData.sessionToken;db=initialData;lastPayloadText=JSON.stringify(db);rebuildIndexes();renderActive();saveCachedData(db);setStatus('최신 Google Sheets 반영 · '+new Date().toLocaleTimeString(),'ok')}
+ else loadCachedData().then(cached=>{if(cached&&DATA_KEYS.every(k=>Array.isArray(cached[k]))){db=cached;rebuildIndexes();renderActive();setStatus('저장된 데이터를 표시했습니다. 최신 내용을 확인 중…')}}).finally(()=>syncData());restartSyncTimer();if(!isMobileDevice())$('#search').focus();
 }
 function loginStatus(message,isError=false){const el=$('#loginStatus');if(el){el.textContent=message;el.className='login-status'+(isError?' err':'')}}
 async function handleGoogleCredential(response){
  auth.required=true;auth.idToken=response.credential||'';loginStatus('계정과 사용 권한을 확인하고 있습니다…');
  try{
   const j=await apiPost('authStatus',{idToken:auth.idToken},CONFIG.AUTH_TIMEOUT_MS);
-  if(j.status==='ADMIN'||j.status==='APPROVED'){auth.sessionToken=j.sessionToken||'';if(auth.sessionToken)localStorage.setItem('hyosan-session',auth.sessionToken);startApp(j.user);return}
+  if(j.status==='ADMIN'||j.status==='APPROVED'){await rememberSession(j.sessionToken||'');startApp(j.user);return}
   auth.idToken='';loginStatus(j.message||'관리자 승인을 기다리고 있습니다.',j.status==='REVOKED');
  }catch(e){auth.idToken='';loginStatus('로그인을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요. '+e.message,true)}
 }
@@ -424,7 +434,7 @@ function showGoogleGate(){
  const form=$('#accessForm');form.className='access-panel google-gate';form.innerHTML='<img class="access-logo" src="assets/hyosan-lpl-logo-full.svg" alt="HYOSAN LPL"><h1 id="accessTitle">HYOSAN LPM Library</h1><p class="login-help">회사에서 사용할 Google 계정으로 로그인해 주세요.<br>최초 로그인 후 관리자의 승인이 필요합니다.</p><div id="googleButton" class="google-button"></div><p id="loginStatus" class="login-status" role="status"></p>';
  const init=()=>{if(!(window.google&&google.accounts&&google.accounts.id)){setTimeout(init,150);return}google.accounts.id.initialize({client_id:auth.clientId,callback:handleGoogleCredential,auto_select:false});google.accounts.id.renderButton($('#googleButton'),{theme:'outline',size:'large',shape:'pill',text:'signin_with',locale:'ko',width:280});fetch(CONFIG.API_URL+'?action=health&ts='+Date.now(),{cache:'no-store'}).catch(()=>{})};init();
 }
-function clearSession(){auth.sessionToken='';localStorage.removeItem('hyosan-session')}
+function clearSession(){auth.idToken='';return rememberSession('')}
 function retryAccessGate(message){
  const form=$('#accessForm');form.className='access-panel google-gate';form.innerHTML='<img class="access-logo" src="assets/hyosan-lpl-logo-full.svg" alt="HYOSAN LPL"><h1 id="accessTitle">HYOSAN LPM Library</h1><p class="login-help">'+esc(message)+'</p><button class="btn" id="retryAccess" type="button">다시 연결</button><p id="loginStatus" class="login-status" role="status"></p>';
  $('#retryAccess').onclick=bootstrapAccess;
@@ -432,15 +442,16 @@ function retryAccessGate(message){
 async function bootstrapAccess(){
  if(accessPromise)return accessPromise;
  accessPromise=(async()=>{
+  await restoreSession();
   if(auth.sessionToken){
    loginStatus('저장된 로그인 정보를 확인하고 있습니다…');
    try{
-    const session=await apiPost('sessionStatus',{},CONFIG.AUTH_TIMEOUT_MS);
-    if(session.status==='ADMIN'||session.status==='APPROVED'){startApp(session.user);return}
-    if(session.status==='PENDING'||session.status==='REVOKED')clearSession()
+    const data=await apiPost('data',{},CONFIG.AUTH_TIMEOUT_MS);
+    if(data.user&&DATA_KEYS.every(k=>Array.isArray(data[k]))){startApp(data.user,data);return}
+    throw new Error('로그인 데이터 응답을 확인할 수 없습니다.');
    }catch(error){
-    if(['INVALID_SESSION','USER_NOT_FOUND','AUTH_REQUIRED','APPROVAL_PENDING','ACCESS_REVOKED'].includes(error.code))clearSession();
-    else{clearSession()}
+    if(['INVALID_SESSION','USER_NOT_FOUND','AUTH_REQUIRED','APPROVAL_PENDING','ACCESS_REVOKED'].includes(error.code))await clearSession();
+    else{retryAccessGate('연결이 잠시 지연되고 있습니다. 저장된 로그인은 유지됩니다. 다시 연결해 주세요.');return}
    }
   }
   let cached=null;
@@ -467,7 +478,7 @@ function renderUserRows(users){
  $('#userDialogContent').innerHTML=`<div class="user-admin-head"><div><h1>사용자 관리</h1><div class="muted">가입 요청 승인 및 사용 중지</div></div><button class="close" onclick="userDialog.close()">×</button></div><table class="user-table"><thead><tr><th>이메일</th><th>이름</th><th>상태</th><th>최근 접속</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 async function changeUserStatus(encodedEmail,status){if(!(auth.user&&auth.user.isAdmin))return;try{await apiPost('setUserStatus',{email:decodeURIComponent(encodedEmail),status});await showUserAdmin()}catch(e){alert(e.message)}}
-function logout(){if(window.google&&google.accounts)google.accounts.id.disableAutoSelect();auth.idToken='';auth.sessionToken='';localStorage.removeItem('hyosan-session');location.reload()}
+async function logout(){if(window.google&&google.accounts)google.accounts.id.disableAutoSelect();await clearSession();location.reload()}
 function isInstalled(){return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}
 function showInstallHelp(message){$('#installHelp').innerHTML=message;if(!installDialog.open)installDialog.showModal()}
 function isMobileDevice(){return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)}
