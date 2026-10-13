@@ -24,6 +24,7 @@ function doPost(e){
     const user=authenticateRequest_(body,cfg);
     if(body.action==='sessionStatus')return jsonOutput(renewSessionResponse_(body,user,userResponse_(user)));
     if(user.Status!=='ADMIN'&&user.Status!=='APPROVED')return jsonOutput(userResponse_(user));
+    if(body.action==='imageVersions')return jsonOutput({ok:true,imageVersions:imageVersionBatch_(body.ids,body.force===true)});
     if(body.action==='data')return jsonOutput(renewSessionResponse_(body,user,Object.assign(getAllData_(body.force===true),{user:userResponse_(user).user})));
     if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmIds||body.lpmId,user.Email,cfg));
     if(body.action==='listUsers')return jsonOutput(listUsers_(user));
@@ -145,7 +146,7 @@ function setUserStatus_(admin,email,status){
 function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관리자 권한이 필요합니다.','ADMIN_REQUIRED')}
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
-const DATA_CACHE_PREFIX='library-data-v12-';
+const DATA_CACHE_PREFIX='library-data-v13-';
 function readDataCache_(cache){
   try{
     const meta=JSON.parse(cache.get(DATA_CACHE_PREFIX+'meta')||'null');if(!meta||!meta.count)return null;
@@ -203,6 +204,22 @@ function imageVersions_(data,previous){
   }catch(e){console.warn('Image metadata refresh incomplete; retaining known image versions.');}
   return versions;
 }
+// Authenticated, bounded background work. Never scan Drive during login/data loading.
+function imageVersionBatch_(requested,force){
+  const ids=Array.from(new Set((Array.isArray(requested)?requested:[]).map(String))).filter(id=>/^[\w-]+$/.test(id)).slice(0,12);
+  if(!ids.length)return {};
+  const catalog=getAllData_(false),allowed=new Set();
+  ['patterns','lpm','specialSpecs','emboss','sites'].forEach(key=>(catalog[key]||[]).forEach(row=>Object.keys(row).filter(field=>/image.*url/i.test(field)).forEach(field=>{
+    String(row[field]||'').split(/[\r\n,;|]+/).forEach(value=>{const match=value.trim().match(/^https?:\/\/(?:drive\.google\.com|drive\.usercontent\.google\.com)\/(?:file\/d\/([\w-]+)|[^\s]*[?&]id=([\w-]+))/i);if(match)allowed.add(match[1]||match[2])});
+  })));
+  const selected=ids.filter(id=>allowed.has(id)),cache=CacheService.getScriptCache(),versions={},missing=[];
+  selected.forEach(id=>{const saved=force?null:cache.get('image-revision-'+id);if(saved)versions[id]=saved;else missing.push(id)});
+  if(missing.length){
+    const fresh=imageVersions_({lpm:missing.map(id=>({ImageURL:'https://drive.google.com/uc?id='+id}))},{});
+    Object.keys(fresh).forEach(id=>{versions[id]=fresh[id];try{cache.put('image-revision-'+id,fresh[id],300)}catch(e){}});
+  }
+  return versions;
+}
 function getAllData_(forceRefresh){
   const cache=CacheService.getScriptCache(),cached=forceRefresh?null:readDataCache_(cache);
   if(cached)return cached;
@@ -240,8 +257,6 @@ function getAllData_(forceRefresh){
     patternIds.forEach(patternId=>{const pattern=patternsById.get(patternId);addRelationIds_(pattern,'RelatedLPM_IDs',lpmIds);addRelationIds_(pattern,'RecommendedEmbossPlate_IDs',embossIds)});
     lpmIds.forEach(lpmId=>{const lpm=lpmById.get(lpmId);addRelationIds_(lpm,'RelatedPattern_IDs',patternIds);addRelationIds_(lpm,'EmbossPlate_IDs',embossIds)});
   });
-  const prior=readDataCache_(cache);
-  out.imageVersions=imageVersions_(out,prior&&prior.imageVersions);
   writeDataCache_(cache,out);
   return out;
 }

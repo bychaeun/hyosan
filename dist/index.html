@@ -138,6 +138,25 @@ async function resumeRecentTab(){
 }
 document.addEventListener('visibilitychange',()=>{if(document.hidden)saveTabResume();else if(appStarted&&Date.now()-lastAccessVerifiedAt>RESUME_MAX_AGE)syncData()});
 window.addEventListener('pagehide',saveTabResume);
+const liveImageVersions={},imageCheckedAt=new Map();let imageRefreshBusy=false,imageRefreshTimer=null,imageRefreshEpoch=0;
+function startImageRefresh(force=false){
+ if(force){imageCheckedAt.clear();imageRefreshEpoch++}
+ if(!imageRefreshTimer)imageRefreshTimer=setInterval(refreshVisibleImages,2500);
+}
+async function refreshVisibleImages(){
+ if(imageRefreshBusy||document.hidden||!appStarted||$('#accessGate').hidden===false||!(auth.sessionToken||auth.idToken))return;
+ const now=Date.now(),ids=[...new Set(qa('img[src]').filter(img=>{const r=img.getBoundingClientRect();return r.width>0&&r.height>0&&r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth}).map(img=>driveFileId(img.src)).filter(id=>id&&now-(imageCheckedAt.get(id)||0)>300000))].slice(0,6);
+ if(!ids.length)return;imageRefreshBusy=true;const epoch=imageRefreshEpoch,session=auth.sessionToken;ids.forEach(id=>imageCheckedAt.set(id,now));
+ try{
+  const result=await apiPost('imageVersions',{ids,force:epoch>0},20000,false);
+  if(epoch!==imageRefreshEpoch||session!==auth.sessionToken||$('#accessGate').hidden===false)return;
+  const changed=new Set();Object.entries(result.imageVersions||{}).forEach(([id,version])=>{if(ids.includes(id)&&String(liveImageVersions[id]||db.imageVersions?.[id]||'')!==String(version)){liveImageVersions[id]=String(version);changed.add(id)}});
+  if(changed.size){imageListCache.clear();qa('img[src]').forEach(img=>{const id=driveFileId(img.src);if(!changed.has(id))return;const url=new URL(img.src);url.searchParams.set('rev',liveImageVersions[id]);if(img.dataset.src)img.dataset.src=url.href;img.src=url.href});db.imageVersions={...db.imageVersions,...liveImageVersions};saveCachedData(db)}
+ }catch(error){
+  if(['INVALID_SESSION','USER_NOT_FOUND','AUTH_REQUIRED','APPROVAL_PENDING','ACCESS_REVOKED'].includes(error.code)){clearSession();retryAccessGate('로그인 권한을 다시 확인해 주세요.');}
+  else ids.forEach(id=>imageCheckedAt.set(id,Date.now()-270000));
+ }finally{imageRefreshBusy=false}
+}
 function imageUrl(u){
  const raw=String(u||'').trim(),fallback='https://placehold.co/800x600/e7e2d9/555?text=No+Image';
  if(!/^https?:\/\//i.test(raw))return fallback;
@@ -145,7 +164,7 @@ function imageUrl(u){
   const url=new URL(raw);
   if(/(^|\.)drive\.google\.com$/i.test(url.hostname)){
    const match=url.pathname.match(/^\/file\/d\/([^/]+)/),id=(match&&match[1])||url.searchParams.get('id');
-   if(id){const revision=db.imageVersions?.[id]||url.searchParams.get('rev');return 'https://drive.google.com/thumbnail?id='+encodeURIComponent(id)+'&sz=w1600'+(revision?'&rev='+encodeURIComponent(revision):'')}
+   if(id){const revision=liveImageVersions[id]||db.imageVersions?.[id]||url.searchParams.get('rev');return 'https://drive.google.com/thumbnail?id='+encodeURIComponent(id)+'&sz=w1600'+(revision?'&rev='+encodeURIComponent(revision):'')}
   }
  }catch(e){}
  return raw;
@@ -190,7 +209,7 @@ async function syncData(force=false){
  syncPromise=(async()=>{try{
   setStatus('Google Sheets 동기화 중…');let j,payload;
   if(auth.required||auth.user||auth.sessionToken||auth.idToken){j=await apiPost('data',force?{force:true}:{});delete j.sessionToken;payload=JSON.stringify(j)}else{const r=await fetch(CONFIG.API_URL+'?action=data&force='+(force?'true':'false')+'&ts='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(CONFIG.SYNC_TIMEOUT_MS)});if(!r.ok)throw new Error('HTTP '+r.status);payload=await r.text();j=JSON.parse(payload)}
-  if(!Array.isArray(j.specialSpecs))j.specialSpecs=[];if(j.ok===false||!DATA_KEYS.every(k=>Array.isArray(j[k])))throw new Error(j.error||'잘못된 데이터 응답');lastAccessVerifiedAt=Date.now();auth.user=j.user||auth.user;if(payload!==lastPayloadText){db=j;lastPayloadText=payload;rebuildIndexes();renderActive();saveCachedData(j)}setStatus('최신 Google Sheets 반영 · '+new Date().toLocaleTimeString(),'ok')
+  if(!Array.isArray(j.specialSpecs))j.specialSpecs=[];if(j.ok===false||!DATA_KEYS.every(k=>Array.isArray(j[k])))throw new Error(j.error||'잘못된 데이터 응답');lastAccessVerifiedAt=Date.now();auth.user=j.user||auth.user;if(payload!==lastPayloadText){j.imageVersions={...db.imageVersions,...j.imageVersions,...liveImageVersions};db=j;lastPayloadText=payload;rebuildIndexes();renderActive();saveCachedData(j)}setStatus('최신 Google Sheets 반영 · '+new Date().toLocaleTimeString(),'ok');startImageRefresh(force);
  }catch(e){if(['INVALID_SESSION','USER_NOT_FOUND','AUTH_REQUIRED','APPROVAL_PENDING','ACCESS_REVOKED'].includes(e.code)){clearSession();setStatus('로그인 갱신이 필요합니다. 다시 로그인해 주세요.','err');setTimeout(()=>location.reload(),400)}else if(isTransientError(e)){setStatus('서버 연결 지연 · 저장된 데이터를 표시 중입니다.','')}else setStatus('동기화 실패 · '+e.message,'err')}})().finally(()=>{syncPromise=null});return syncPromise;
 }
 function rebuildIndexes(){
@@ -442,10 +461,10 @@ $('#modal').addEventListener('close',()=>{closeImageFullView();state.modalHistor
 const searchInput=$('#search'),clearSearchButton=$('#clearSearch');function updateSearchClear(){clearSearchButton.hidden=!searchInput.value}searchInput.addEventListener('input',updateSearchClear);clearSearchButton.onclick=()=>{clearTimeout(searchDelay);searchInput.value='';updateSearchClear();searchInput.dispatchEvent(new Event('input',{bubbles:true}));searchInput.focus()};updateSearchClear();
 function restartSyncTimer(){if(syncTimer)clearInterval(syncTimer);syncTimer=setInterval(()=>{if(!document.hidden)syncData()},CONFIG.SYNC_MS)}
 function startApp(user=null,initialData=null){
- if(appStarted)return;appStarted=true;auth.user=user;if(user)auth.required=true;$('#accessGate').hidden=true;document.body.classList.remove('access-locked');
+ if(appStarted)return;appStarted=true;auth.user=user;if(user)auth.required=true;$('#accessGate').hidden=true;document.body.classList.remove('access-locked');startImageRefresh();
  const isAdmin=!!(user&&user.isAdmin),adminButton=$('#userAdminButton'),adminDialog=$('#userDialog');adminButton.hidden=!isAdmin;adminDialog.hidden=!isAdmin;adminDialog.setAttribute('aria-hidden',String(!isAdmin));$('#logoutButton').hidden=!auth.required;
  if(initialData&&DATA_KEYS.every(k=>Array.isArray(initialData[k]))){lastAccessVerifiedAt=Date.now();delete initialData.sessionToken;db=initialData;lastPayloadText=JSON.stringify(db);rebuildIndexes();renderActive();saveCachedData(db);setStatus('최신 Google Sheets 반영 · '+new Date().toLocaleTimeString(),'ok')}
- else loadCachedData().then(cached=>{if(cached&&DATA_KEYS.every(k=>Array.isArray(cached[k]))){db=cached;rebuildIndexes();renderActive();setStatus('저장된 데이터를 표시했습니다. 최신 내용을 확인 중…')}}).finally(()=>syncData());restartSyncTimer();if(!isMobileDevice())$('#search').focus();
+ else loadCachedData().then(cached=>{if(cached&&cached.user?.email===user?.email&&DATA_KEYS.every(k=>Array.isArray(cached[k]))){db=cached;rebuildIndexes();renderActive();setStatus('저장된 데이터를 표시했습니다. 최신 내용을 확인 중…')}}).finally(()=>syncData());restartSyncTimer();if(!isMobileDevice())$('#search').focus();
 }
 function loginStatus(message,isError=false){const el=$('#loginStatus');if(el){el.textContent=message;el.className='login-status'+(isError?' err':'')}}
 async function handleGoogleCredential(response){
@@ -473,8 +492,8 @@ async function bootstrapAccess(){
   if(auth.sessionToken){
    loginStatus('저장된 로그인 정보를 확인하고 있습니다…');
    try{
-    const data=await apiPost('data',{},CONFIG.AUTH_TIMEOUT_MS);
-    if(data.user&&DATA_KEYS.every(k=>Array.isArray(data[k]))){startApp(data.user,data);return}
+    const data=await apiPost('sessionStatus',{},CONFIG.AUTH_TIMEOUT_MS);
+    if(data.user){lastAccessVerifiedAt=Date.now();startApp(data.user);return}
     throw new Error('로그인 데이터 응답을 확인할 수 없습니다.');
    }catch(error){
     if(['INVALID_SESSION','USER_NOT_FOUND','AUTH_REQUIRED','APPROVAL_PENDING','ACCESS_REVOKED'].includes(error.code))await clearSession();
