@@ -23,7 +23,7 @@ public final class MainActivity extends Activity {
         layout.setGravity(Gravity.CENTER);
         layout.setPadding(32, 64, 32, 32);
         TextView title = new TextView(this);
-        title.setText("HYOSAN LPM\n효산 패턴 라이브러리");
+        title.setText("HYOSAN LPL\n효산 패턴 라이브러리");
         title.setTextSize(24); title.setGravity(Gravity.CENTER);
         layout.addView(title);
         Button open = new Button(this); open.setText("라이브러리 열기");

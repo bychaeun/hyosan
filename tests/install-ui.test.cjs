@@ -12,7 +12,7 @@ test('install chooser offers iOS instructions and an existing Android APK',()=>{
  assert.match(output,/iPhone · iPad/);
  assert.match(output,/공유 → 홈 화면에 추가 → 추가/);
  assert.match(output,/Android APK 다운로드/);
- assert.match(output,/테스트 버전/);
+ assert.match(output,/<p class="muted">보안 경고가 표시되면 내용을 확인한 후 진행하세요\.<\/p>/);
  const file=output.match(/href="\.\/(assets\/[^\"]+\.apk)"/)[1];
  assert.ok(fs.statSync(path.join(root,file)).size>100000);
  assert.match(html,/\$\('#installButton'\)\.textContent='앱 설치'/);
