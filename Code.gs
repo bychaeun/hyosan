@@ -145,7 +145,7 @@ function setUserStatus_(admin,email,status){
 function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관리자 권한이 필요합니다.','ADMIN_REQUIRED')}
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
-const DATA_CACHE_PREFIX='library-data-v11-';
+const DATA_CACHE_PREFIX='library-data-v12-';
 function readDataCache_(cache){
   try{
     const meta=JSON.parse(cache.get(DATA_CACHE_PREFIX+'meta')||'null');if(!meta||!meta.count)return null;
@@ -177,6 +177,31 @@ function readSheetsBatch_(names){
   const ss=SpreadsheetApp.openById(SPREADSHEET_ID),result={};
   [...new Set(names)].forEach(name=>{result[name]=readSheet_(ss,name)});
   return result;
+}
+// Inspect metadata only; image bytes are still loaded lazily by the browser.
+function imageVersions_(data,previous){
+  const ids=new Set(),versions={};
+  ['patterns','lpm','specialSpecs','emboss','sites'].forEach(key=>(data[key]||[]).forEach(row=>Object.keys(row).filter(field=>/image.*url/i.test(field)).forEach(field=>{
+    String(row[field]||'').split(/[\r\n,;|]+/).forEach(value=>{
+      const match=value.trim().match(/^https?:\/\/(?:drive\.google\.com|drive\.usercontent\.google\.com)\/(?:file\/d\/([\w-]+)|[^\s]*[?&]id=([\w-]+))/i);
+      if(match)ids.add(match[1]||match[2]);
+    });
+  })));
+  const list=Array.from(ids).sort();
+  list.forEach(id=>{if(previous&&previous[id])versions[id]=previous[id]});
+  if(!list.length)return versions;
+  try{
+    const headers={Authorization:'Bearer '+ScriptApp.getOAuthToken()};
+    for(let start=0;start<list.length;start+=50){
+      const batch=list.slice(start,start+50),responses=UrlFetchApp.fetchAll(batch.map(id=>({url:'https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?fields=modifiedTime&supportsAllDrives=true',headers:headers,muteHttpExceptions:true})));
+      responses.forEach((response,index)=>{
+        if(response.getResponseCode()!==200)return;
+        const modified=JSON.parse(response.getContentText()).modifiedTime;
+        if(modified&&Number.isFinite(Date.parse(modified)))versions[batch[index]]=String(Date.parse(modified));
+      });
+    }
+  }catch(e){console.warn('Image metadata refresh incomplete; retaining known image versions.');}
+  return versions;
 }
 function getAllData_(forceRefresh){
   const cache=CacheService.getScriptCache(),cached=forceRefresh?null:readDataCache_(cache);
@@ -215,6 +240,8 @@ function getAllData_(forceRefresh){
     patternIds.forEach(patternId=>{const pattern=patternsById.get(patternId);addRelationIds_(pattern,'RelatedLPM_IDs',lpmIds);addRelationIds_(pattern,'RecommendedEmbossPlate_IDs',embossIds)});
     lpmIds.forEach(lpmId=>{const lpm=lpmById.get(lpmId);addRelationIds_(lpm,'RelatedPattern_IDs',patternIds);addRelationIds_(lpm,'EmbossPlate_IDs',embossIds)});
   });
+  const prior=readDataCache_(cache);
+  out.imageVersions=imageVersions_(out,prior&&prior.imageVersions);
   writeDataCache_(cache,out);
   return out;
 }

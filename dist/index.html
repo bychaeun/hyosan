@@ -145,7 +145,7 @@ function imageUrl(u){
   const url=new URL(raw);
   if(/(^|\.)drive\.google\.com$/i.test(url.hostname)){
    const match=url.pathname.match(/^\/file\/d\/([^/]+)/),id=(match&&match[1])||url.searchParams.get('id');
-   if(id)return 'https://drive.google.com/thumbnail?id='+encodeURIComponent(id)+'&sz=w1600';
+   if(id){const revision=db.imageVersions?.[id]||url.searchParams.get('rev');return 'https://drive.google.com/thumbnail?id='+encodeURIComponent(id)+'&sz=w1600'+(revision?'&rev='+encodeURIComponent(revision):'')}
   }
  }catch(e){}
  return raw;
@@ -380,7 +380,7 @@ async function printSelectedLpm(){if(isMobileDevice()){showInstallHelp('PDF 저�
 
 function composerImage(item,type){return type==='lpm'?(item.ImageURL||item.ImageURLs||item.ImageURL2||item.ImageURL3):(item.ImageURL||item.ImageURLs||item.ImageURL2||item.ImageURL3)}
 function composerLabel(item,type){return type==='lpm'?(item.ProductName||item.LPM_ID):(item.PlateName||item.EmbossPlate_ID)}
-function composerImageUrl(value){const raw=String(value||'').split(/[\r\n,;|]+/).map(v=>v.trim()).find(v=>/^https?:\/\//i.test(v))||'',id=driveFileId(raw);return id?'https://drive.google.com/thumbnail?id='+encodeURIComponent(id)+'&sz=w4096':imageUrl(raw)}
+function composerImageUrl(value){const raw=String(value||'').split(/[\r\n,;|]+/).map(v=>v.trim()).find(v=>/^https?:\/\//i.test(v))||'';return modalImageUrl(imageUrl(raw))}
 function applyComposerZoom(){const preview=$('#composerPreview');preview.style.setProperty('--composer-zoom',String(state.composerZoom));preview.style.setProperty('--composer-x',state.composerPanX+'%');preview.style.setProperty('--composer-y',state.composerPanY+'%');preview.classList.toggle('zoomed',state.composerZoom>1.001)}
 function positiveNumber(value){const match=String(value||'').replace(/,/g,'').match(/[0-9]+(?:\.[0-9]+)?/),n=match?Number(match[0]):0;return Number.isFinite(n)&&n>0?n:0}
 function embossPixelSize(item){let width=positiveNumber(item.PlateWidthPX||item.ImageWidthPX||item.PlateWidth||item.Width||item['경면판가로']||item['경면가로']||item['가로']),height=positiveNumber(item.PlateHeightPX||item.ImageHeightPX||item.PlateHeight||item.Height||item['경면판세로']||item['경면세로']||item['세로']),combined=String(item.PlateSizePX||item.ImageSizePX||item.PlateSize||item.Size||item['경면판사이즈']||item['경면사이즈']||item['사이즈']||'');if((!width||!height)&&combined){const m=combined.match(/([0-9.,]+)\s*[x×*]\s*([0-9.,]+)/i);if(m){width=width||positiveNumber(m[1]);height=height||positiveNumber(m[2])}}return{width:width||1000,height:height||1000}}
