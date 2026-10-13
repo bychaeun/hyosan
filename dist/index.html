@@ -108,6 +108,8 @@ let indexes={patterns:new Map(),lpm:new Map(),specialSpecs:new Map(),emboss:new 
 function readStoredSession(){try{return localStorage.getItem('hyosan-session')||''}catch(e){return ''}}
 const auth={required:false,clientId:'',idToken:'',sessionToken:readStoredSession(),user:null};
 let accessPromise=null;
+let lastAccessVerifiedAt=0;
+const RESUME_KEY='hyosan-tab-resume-v1',RESUME_MAX_AGE=30*60*1000;
 const $=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)],split=v=>String(v||'').split(/[\r\n,;|]+/).map(x=>x.trim()).filter(Boolean);
 let cacheDbPromise;
 const cacheDb=()=>cacheDbPromise||(cacheDbPromise=new Promise((resolve,reject)=>{const request=indexedDB.open('hyosan-library',1),timer=setTimeout(()=>reject(new Error('저장소 연결 지연')),3000);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('data'))request.result.createObjectStore('data')};request.onsuccess=()=>{clearTimeout(timer);resolve(request.result)};request.onerror=()=>{clearTimeout(timer);reject(request.error)};request.onblocked=()=>{clearTimeout(timer);reject(new Error('저장소 사용 중'))}}).catch(error=>{cacheDbPromise=null;throw error}));
@@ -119,6 +121,23 @@ function rememberSession(token){
  const value=auth.sessionToken;sessionPersistence=sessionPersistence.catch(()=>{}).then(async()=>{try{const store=(await cacheDb()).transaction('data','readwrite').objectStore('data');await new Promise((resolve,reject)=>{const request=value?store.put(value,'session'):store.delete('session');request.onsuccess=resolve;request.onerror=()=>reject(request.error)})}catch(e){}});return sessionPersistence;
 }
 async function restoreSession(){if(auth.sessionToken)return;try{await sessionPersistence;const store=(await cacheDb()).transaction('data','readonly').objectStore('data');const token=await new Promise((resolve,reject)=>{const r=store.get('session');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});if(token)rememberSession(token)}catch(e){}}
+function saveTabResume(){
+ if(!appStarted||!auth.sessionToken||!auth.user||!lastAccessVerifiedAt)return;
+ const fields=['patternCat','lpmBook','lpmCat','specialMajor','specialSub','siteType','siteCategory','toolMode','composerLpmId','composerEmbossId','composerStrength','composerInvert','composerCandidateGroups','composerActiveGroup','composerActiveCandidate','pPage','lPage','sPage','ePage','cPage','selectedHex','wheelPoint'],view={};
+ fields.forEach(key=>view[key]=state[key]);view.selectedLpmIds=[...state.selectedLpmIds];view.selectedColorLpmIds=[...state.selectedColorLpmIds];
+ try{sessionStorage.setItem(RESUME_KEY,JSON.stringify({token:auth.sessionToken,user:auth.user,verifiedAt:lastAccessVerifiedAt,page:$('.page.active')?.id||'patterns',search:$('#search').value,scrollY:window.scrollY,view,titles:[0,1].map(i=>$('#composerExportTitle'+i).value)}))}catch(e){}
+}
+function recentTabResume(){
+ try{const saved=JSON.parse(sessionStorage.getItem(RESUME_KEY)||'null'),now=Date.now();if(!saved||saved.token!==auth.sessionToken||!saved.user?.email||!saved.verifiedAt||now<saved.verifiedAt||now-saved.verifiedAt>RESUME_MAX_AGE)return null;const payload=JSON.parse(atob(auth.sessionToken.split('.')[0].replace(/-/g,'+').replace(/_/g,'/')));if(Number(payload.exp)<=now||String(payload.email).toLowerCase()!==saved.user.email.toLowerCase())return null;return saved}catch(e){return null}
+}
+async function resumeRecentTab(){
+ const saved=recentTabResume();if(!saved)return false;const cached=await loadCachedData();if(!cached||!DATA_KEYS.every(k=>Array.isArray(cached[k]))||cached.user?.email!==saved.user.email||!recentTabResume())return false;
+ for(const [key,value] of Object.entries(saved.view||{})){if(!(key in state)||key.startsWith('modal'))continue;state[key]=key==='selectedLpmIds'||key==='selectedColorLpmIds'?new Set(value):value}
+ const page=qa('.page').find(el=>el.id===saved.page);if(page){qa('.page').forEach(el=>el.classList.toggle('active',el===page));qa('.nav button').forEach(el=>el.classList.toggle('active',el.dataset.page===saved.page));const nav=qa('.nav button').find(el=>el.dataset.page===saved.page);if(nav)$('#pageTitle').textContent=nav.textContent}
+ $('#search').value=saved.search||'';updateSearchClear();startApp(saved.user,cached);lastAccessVerifiedAt=saved.verifiedAt;[0,1].forEach(i=>$('#composerExportTitle'+i).value=saved.titles?.[i]||'');setStatus('');requestAnimationFrame(()=>window.scrollTo(0,saved.scrollY||0));syncData();return true;
+}
+document.addEventListener('visibilitychange',()=>{if(document.hidden)saveTabResume();else if(appStarted&&Date.now()-lastAccessVerifiedAt>RESUME_MAX_AGE)syncData()});
+window.addEventListener('pagehide',saveTabResume);
 function imageUrl(u){
  const raw=String(u||'').trim(),fallback='https://placehold.co/800x600/e7e2d9/555?text=No+Image';
  if(!/^https?:\/\//i.test(raw))return fallback;
@@ -171,7 +190,7 @@ async function syncData(force=false){
  syncPromise=(async()=>{try{
   setStatus('Google Sheets 동기화 중…');let j,payload;
   if(auth.required||auth.user||auth.sessionToken||auth.idToken){j=await apiPost('data',force?{force:true}:{});delete j.sessionToken;payload=JSON.stringify(j)}else{const r=await fetch(CONFIG.API_URL+'?action=data&force='+(force?'true':'false')+'&ts='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(CONFIG.SYNC_TIMEOUT_MS)});if(!r.ok)throw new Error('HTTP '+r.status);payload=await r.text();j=JSON.parse(payload)}
-  if(!Array.isArray(j.specialSpecs))j.specialSpecs=[];if(j.ok===false||!DATA_KEYS.every(k=>Array.isArray(j[k])))throw new Error(j.error||'잘못된 데이터 응답');if(payload!==lastPayloadText){db=j;lastPayloadText=payload;rebuildIndexes();renderActive();saveCachedData(j)}setStatus('최신 Google Sheets 반영 · '+new Date().toLocaleTimeString(),'ok')
+  if(!Array.isArray(j.specialSpecs))j.specialSpecs=[];if(j.ok===false||!DATA_KEYS.every(k=>Array.isArray(j[k])))throw new Error(j.error||'잘못된 데이터 응답');lastAccessVerifiedAt=Date.now();auth.user=j.user||auth.user;if(payload!==lastPayloadText){db=j;lastPayloadText=payload;rebuildIndexes();renderActive();saveCachedData(j)}setStatus('최신 Google Sheets 반영 · '+new Date().toLocaleTimeString(),'ok')
  }catch(e){if(['INVALID_SESSION','USER_NOT_FOUND','AUTH_REQUIRED','APPROVAL_PENDING','ACCESS_REVOKED'].includes(e.code)){clearSession();setStatus('로그인 갱신이 필요합니다. 다시 로그인해 주세요.','err');setTimeout(()=>location.reload(),400)}else if(isTransientError(e)){setStatus('서버 연결 지연 · 저장된 데이터를 표시 중입니다.','')}else setStatus('동기화 실패 · '+e.message,'err')}})().finally(()=>{syncPromise=null});return syncPromise;
 }
 function rebuildIndexes(){
@@ -425,7 +444,7 @@ function restartSyncTimer(){if(syncTimer)clearInterval(syncTimer);syncTimer=setI
 function startApp(user=null,initialData=null){
  if(appStarted)return;appStarted=true;auth.user=user;if(user)auth.required=true;$('#accessGate').hidden=true;document.body.classList.remove('access-locked');
  const isAdmin=!!(user&&user.isAdmin),adminButton=$('#userAdminButton'),adminDialog=$('#userDialog');adminButton.hidden=!isAdmin;adminDialog.hidden=!isAdmin;adminDialog.setAttribute('aria-hidden',String(!isAdmin));$('#logoutButton').hidden=!auth.required;
- if(initialData&&DATA_KEYS.every(k=>Array.isArray(initialData[k]))){delete initialData.sessionToken;db=initialData;lastPayloadText=JSON.stringify(db);rebuildIndexes();renderActive();saveCachedData(db);setStatus('최신 Google Sheets 반영 · '+new Date().toLocaleTimeString(),'ok')}
+ if(initialData&&DATA_KEYS.every(k=>Array.isArray(initialData[k]))){lastAccessVerifiedAt=Date.now();delete initialData.sessionToken;db=initialData;lastPayloadText=JSON.stringify(db);rebuildIndexes();renderActive();saveCachedData(db);setStatus('최신 Google Sheets 반영 · '+new Date().toLocaleTimeString(),'ok')}
  else loadCachedData().then(cached=>{if(cached&&DATA_KEYS.every(k=>Array.isArray(cached[k]))){db=cached;rebuildIndexes();renderActive();setStatus('저장된 데이터를 표시했습니다. 최신 내용을 확인 중…')}}).finally(()=>syncData());restartSyncTimer();if(!isMobileDevice())$('#search').focus();
 }
 function loginStatus(message,isError=false){const el=$('#loginStatus');if(el){el.textContent=message;el.className='login-status'+(isError?' err':'')}}
@@ -441,7 +460,7 @@ function showGoogleGate(){
  const form=$('#accessForm');form.className='access-panel google-gate';form.innerHTML='<img class="access-logo" src="assets/hyosan-lpl-logo-full.svg" alt="HYOSAN LPL"><h1 id="accessTitle">HYOSAN LPM Library</h1><p class="login-help">회사에서 사용할 Google 계정으로 로그인해 주세요.<br>최초 로그인 후 관리자의 승인이 필요합니다.</p><div id="googleButton" class="google-button"></div><p id="loginStatus" class="login-status" role="status"></p>';
  const init=()=>{if(!(window.google&&google.accounts&&google.accounts.id)){setTimeout(init,150);return}google.accounts.id.initialize({client_id:auth.clientId,callback:handleGoogleCredential,auto_select:false});google.accounts.id.renderButton($('#googleButton'),{theme:'outline',size:'large',shape:'pill',text:'signin_with',locale:'ko',width:280});fetch(CONFIG.API_URL+'?action=health&ts='+Date.now(),{cache:'no-store'}).catch(()=>{})};init();
 }
-function clearSession(){auth.idToken='';return rememberSession('')}
+function clearSession(){auth.idToken='';try{sessionStorage.removeItem(RESUME_KEY)}catch(e){}if(typeof appStarted!=='undefined'&&appStarted){$('#accessGate').hidden=false;document.body.classList.add('access-locked')}return rememberSession('')}
 function retryAccessGate(message){
  const form=$('#accessForm');form.className='access-panel google-gate';form.innerHTML='<img class="access-logo" src="assets/hyosan-lpl-logo-full.svg" alt="HYOSAN LPL"><h1 id="accessTitle">HYOSAN LPM Library</h1><p class="login-help">'+esc(message)+'</p><button class="btn" id="retryAccess" type="button">다시 연결</button><p id="loginStatus" class="login-status" role="status"></p>';
  $('#retryAccess').onclick=bootstrapAccess;
@@ -450,6 +469,7 @@ async function bootstrapAccess(){
  if(accessPromise)return accessPromise;
  accessPromise=(async()=>{
   await restoreSession();
+  if(await resumeRecentTab())return;
   if(auth.sessionToken){
    loginStatus('저장된 로그인 정보를 확인하고 있습니다…');
    try{
