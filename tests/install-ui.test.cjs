@@ -1,0 +1,20 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const vm=require('node:vm');
+const root=path.join(__dirname,'..');
+const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+test('install chooser offers iOS instructions and an existing Android APK',()=>{
+ let output='';
+ const source=html.slice(html.indexOf('function installApp(){'),html.indexOf('async function installWebApp(){'));
+ vm.runInNewContext(source+';installApp();',{showInstallHelp:value=>output=value});
+ assert.match(output,/iPhone · iPad/);
+ assert.match(output,/공유 → 홈 화면에 추가 → 추가/);
+ assert.match(output,/Android APK 다운로드/);
+ assert.match(output,/테스트 버전/);
+ const file=output.match(/href="\.\/(assets\/[^\"]+\.apk)"/)[1];
+ assert.ok(fs.statSync(path.join(root,file)).size>100000);
+ assert.match(html,/\$\('#installButton'\)\.textContent='앱 설치'/);
+ assert.doesNotMatch(html,/textContent=isMobileDevice\(\)\?'모바일 앱 설치'/);
+});
