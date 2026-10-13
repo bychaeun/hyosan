@@ -1,0 +1,14 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.hyosan.lpm.preview'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.hyosan.lpm.preview'
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName '1.0-preview'
+    }
+    buildTypes { debug { debuggable false } }
+}
+dependencies { implementation 'androidx.browser:browser:1.8.0' }
