@@ -1,27 +1,34 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const fs=require('node:fs');
-const vm=require('node:vm');
-const path=require('node:path');
+const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../assets/image-share.js'),'utf8');
 function setup(supported=true,error=null){
- const nodes=Object.fromEntries(['img','[role=status]','.share-confirm','a','.close'].map(k=>[k,{removeAttribute(){}}]));
- let shares=0,revoked=0,close;
- const dialog={setAttribute(){},querySelector:s=>nodes[s],addEventListener:(e,fn)=>close=fn,showModal(){},remove(){},close:()=>close()};
- const context={File:class {constructor(b,name,opts){this.name=name;this.type=opts.type}},navigator:{canShare:()=>supported,share:async()=>{shares++;if(error)throw error}},URL:{createObjectURL:()=> 'blob:test',revokeObjectURL:()=>revoked++},document:{getElementById:()=>null,createElement:()=>dialog,body:{appendChild(){}}}};
- vm.runInNewContext(source,context);context.openImageShareDialog({type:'image/png'},'sample.png');
- return {nodes,dialog,get shares(){return shares},get revoked(){return revoked}};
+ let shares=0,expire;
+ const context={File:class{constructor(b,name,opts){this.name=name;this.type=opts.type}},
+ navigator:{canShare:()=>supported,share:()=>{shares++;return error?Promise.reject(error):Promise.resolve()}},
+ setTimeout:fn=>{expire=fn},clearTimeout(){}};
+ vm.runInNewContext(source,context);
+ return {context,get shares(){return shares},expire:()=>expire()};
 }
-test('sharing waits for explicit tap and releases blob on close',async()=>{
- const t=setup();assert.equal(t.shares,0);assert.equal(t.nodes.a.download,'sample.png');
- await t.nodes['.share-confirm'].onclick();assert.equal(t.shares,1);assert.equal(t.nodes['.share-confirm'].disabled,false);
- t.dialog.close();assert.equal(t.revoked,1);
+test('opens native sharing immediately without DOM or dialog',async()=>{
+ const t=setup(),result=t.context.shareImageBlob({type:'image/png'},'sample.png','a');
+ assert.equal(t.shares,1);assert.match(await result,/전달/);
 });
-test('unsupported file sharing leaves download available',()=>{
- const t=setup(false);assert.equal(t.nodes['.share-confirm'].hidden,true);assert.equal(t.nodes.a.href,'blob:test');
- assert.match(t.nodes['[role=status]'].textContent,/지원하지/);
+test('unsupported sharing explains download fallback without popup',async()=>{
+ const t=setup(false);assert.match(await t.context.shareImageBlob({},'a.png','a'),/지원하지/);assert.equal(t.shares,0);
 });
-test('cancel does not claim delivery and permits retry',async()=>{
- const t=setup(true,{name:'AbortError'});await t.nodes['.share-confirm'].onclick();
- assert.match(t.nodes['[role=status]'].textContent,/취소/);assert.equal(t.nodes['.share-confirm'].disabled,false);
+test('cancel is not reported as success and cached retry calls share synchronously',async()=>{
+ const t=setup(true,{name:'AbortError'});assert.match(await t.context.shareImageBlob({},'a.png','a'),/취소/);
+ const result=t.context.shareImageFile(t.context.cachedImageShare('a'));assert.equal(t.shares,2);await result;
+});
+test('activation failure retains file for retry and rejects changed keys',async()=>{
+ const t=setup(true,{name:'NotAllowedError'});assert.match(await t.context.shareImageBlob({},'a.png','a'),/다시/);
+ assert.ok(t.context.cachedImageShare('a'));assert.equal(t.context.cachedImageShare('b'),null);
+ await t.context.shareImageBlob({},'b.png','b');assert.equal(t.context.cachedImageShare('a'),null);
+ t.expire();assert.equal(t.context.cachedImageShare('b'),null);
+});
+test('concurrent shares do not open multiple native sheets',async()=>{
+ const t=setup();let finish;t.context.navigator.share=()=>new Promise(resolve=>finish=resolve);
+ const first=t.context.shareImageBlob({},'a.png','a');
+ assert.match(await t.context.shareImageFile(t.context.cachedImageShare('a')),/이미/);finish();await first;
 });
