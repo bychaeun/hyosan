@@ -5,7 +5,7 @@ const vm=require('node:vm');
 const path=require('node:path');
 function setup(file,urls=['one','two','three']){
  const html=fs.readFileSync(path.join(__dirname,'..',file),'utf8').replace(/\r\n/g,'\n');
- const start=html.indexOf('async function saveColorRecommendations(){');
+ const start=html.indexOf('async function saveColorRecommendations(');
  const fn=html.slice(start,html.indexOf('\nfunction renderColor()',start));
  const ui=html.split('\n').find(line=>line.startsWith('function updateColorSelectionUi('));
  const items=urls.map((url,i)=>({LPM_ID:String(i),ProductName:'Product '+i,ImageURL:url}));

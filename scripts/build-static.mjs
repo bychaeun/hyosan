@@ -5,6 +5,8 @@ import {join} from 'node:path';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const dist=join(root,'dist');
 await mkdir(join(dist,'assets'),{recursive:true});
+await mkdir(join(dist,'.well-known'),{recursive:true});
+await copyFile(join(root,'.well-known','assetlinks.json'),join(dist,'.well-known','assetlinks.json'));
 for(const name of ['index.html','sw.js','privacy.html','manifest.webmanifest','mobile.webmanifest']){
   await copyFile(join(root,name),join(dist,name));
 }
