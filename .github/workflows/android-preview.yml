@@ -1,4 +1,4 @@
-name: Build Android preview APK
+name: Build Android TWA APK
 on:
   workflow_dispatch:
   push:
@@ -19,11 +19,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build installable preview
-        run: gradle -p android --no-daemon :app:assembleDebug :app:lintDebug
+      - name: Build unsigned release for local signing
+        run: |
+          gradle -p android --no-daemon :app:assembleRelease :app:lintRelease
+          mkdir -p android-output
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk android-output/
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" android-output/
       - uses: actions/upload-artifact@v4
         with:
-          name: HYOSAN-LPM-preview-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: HYOSAN-LPL-TWA-unsigned
+          path: android-output/
           if-no-files-found: error
           retention-days: 30

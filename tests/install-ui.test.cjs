@@ -5,6 +5,15 @@ const path=require('node:path');
 const vm=require('node:vm');
 const root=path.join(__dirname,'..');
 const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+test('installed app names agree across iOS, web and Android',()=>{
+ for(const file of ['manifest.webmanifest','mobile.webmanifest']){
+  const manifest=JSON.parse(fs.readFileSync(path.join(root,file),'utf8'));
+  assert.equal(manifest.name,'HYOSAN LPL');
+  assert.equal(manifest.short_name,'HYOSAN LPL');
+ }
+ assert.match(html,/<meta name="apple-mobile-web-app-title" content="HYOSAN LPL">/);
+ assert.match(fs.readFileSync(path.join(root,'android/app/src/main/AndroidManifest.xml'),'utf8'),/android:label="HYOSAN LPL"/);
+});
 test('install chooser offers iOS instructions and an existing Android APK',()=>{
  let output='';
  const source=html.slice(html.indexOf('function installApp(){'),html.indexOf('async function installWebApp(){'));

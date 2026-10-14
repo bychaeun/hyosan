@@ -1,10 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:label="HYOSAN LPL" android:icon="@drawable/ic_hyosan" android:allowBackup="false" android:usesCleartextTraffic="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">
-        <activity android:name=".MainActivity" android:exported="true">
+        <meta-data android:name="asset_statements" android:resource="@string/asset_statements" />
+        <activity android:name="com.google.androidbrowserhelper.trusted.LauncherActivity" android:exported="true">
+            <meta-data android:name="android.support.customtabs.trusted.DEFAULT_URL" android:value="https://hyosan-lpm.chae-ni.chatgpt.site/" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="hyosan-lpm.chae-ni.chatgpt.site" />
             </intent-filter>
         </activity>
     </application>

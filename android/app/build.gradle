@@ -3,12 +3,12 @@ android {
     namespace 'com.hyosan.lpm.preview'
     compileSdk 35
     defaultConfig {
-        applicationId 'com.hyosan.lpm.preview'
+        applicationId 'com.hyosan.lpl'
         minSdk 23
         targetSdk 35
-        versionCode 2
-        versionName '1.1-preview'
+        versionCode 1
+        versionName '2.0'
     }
     buildTypes { debug { debuggable false } }
 }
-dependencies { implementation 'androidx.browser:browser:1.8.0' }
+dependencies { implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.6.2' }
