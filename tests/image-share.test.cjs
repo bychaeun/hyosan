@@ -32,3 +32,24 @@ test('concurrent shares do not open multiple native sheets',async()=>{
  const first=t.context.shareImageBlob({},'a.png','a');
  assert.match(await t.context.shareImageFile(t.context.cachedImageShare('a')),/이미/);finish();await first;
 });
+test('product titles and filenames contain no line breaks',async()=>{
+ const t=setup();let data;t.context.navigator.share=async value=>data=value;
+ await t.context.shareImageBlob({},'N400\nN401.png','product');
+ assert.equal(data.title,'N400 N401');assert.equal(data.files[0].name,'N400 N401.png');
+});
+test('site image sharing omits title and text, including cached retry',async()=>{
+ const t=setup();let data;t.context.navigator.share=async value=>data=value;
+ await t.context.shareImageBlob({},'HYOSAN-image.png','site','');
+ assert.deepEqual(Object.keys(data),['files']);
+ await t.context.shareImageFile(t.context.cachedImageShare('site'));
+ assert.deepEqual(Object.keys(data),['files']);
+});
+test('dialog position and focus are restored after native sharing',async()=>{
+ const t=setup();let focused,restored=false;
+ const dialog={style:{},scrollTop:42,scrollLeft:0,open:true,getAttribute:()=>null,
+ getBoundingClientRect:()=>({top:15,left:20,width:600,height:500}),removeAttribute:()=>restored=true};
+ t.context.document={querySelector:()=>dialog,activeElement:{isConnected:true,focus:opts=>focused=opts}};
+ t.context.navigator.share=async()=>{assert.equal(dialog.style.position,'fixed');dialog.scrollTop=0};
+ await t.context.shareImageBlob({},'a.png','a');
+ assert.equal(dialog.scrollTop,42);assert.equal(restored,true);assert.equal(focused.preventScroll,true);
+});

@@ -72,6 +72,8 @@ html,body{overscroll-behavior-y:none}html{height:100%}body{min-height:100%}.pick
 @media(max-width:700px){.comparing .composer-preview-panel{position:static;padding-bottom:0}}
 @keyframes candidate-tap{0%,100%{scale:1}40%{scale:1.035}}.composer-candidate.active{animation:candidate-tap 220ms ease-out}@media(prefers-reduced-motion:reduce){.composer-candidate.active{animation:none}}
 .share-image{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:38px;padding:8px;flex-shrink:0}@media(max-width:700px){.composer-export-controls{grid-template-columns:minmax(0,1fr) auto auto}.color-export-controls{grid-template-columns:minmax(0,1fr) auto auto}.color-export-controls input{grid-column:1/-1}}
+#actionStatus{min-height:3.2em;margin-bottom:0}.share-image[aria-busy="true"]{opacity:.55;cursor:wait}
+.close{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;line-height:1;appearance:none;-webkit-appearance:none}
 </style>
 </head>
 <body class="access-locked">
@@ -209,7 +211,7 @@ async function fetchAppConfig(){
 async function syncData(force=false){
  if(!CONFIG.API_URL){setStatus('Apps Script URL 설정 필요','err');return}if(syncPromise)return syncPromise;
  syncPromise=(async()=>{try{
-  setStatus('Google Sheets 동기화 중…');let j,payload;
+  if(force||!appStarted)setStatus('Google Sheets 동기화 중…');let j,payload;
   if(auth.required||auth.user||auth.sessionToken||auth.idToken){j=await apiPost('data',force?{force:true}:{});delete j.sessionToken;payload=JSON.stringify(j)}else{const r=await fetch(CONFIG.API_URL+'?action=data&force='+(force?'true':'false')+'&ts='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(CONFIG.SYNC_TIMEOUT_MS)});if(!r.ok)throw new Error('HTTP '+r.status);payload=await r.text();j=JSON.parse(payload)}
   if(!Array.isArray(j.specialSpecs))j.specialSpecs=[];if(j.ok===false||!DATA_KEYS.every(k=>Array.isArray(j[k])))throw new Error(j.error||'잘못된 데이터 응답');lastAccessVerifiedAt=Date.now();auth.user=j.user||auth.user;if(payload!==lastPayloadText){j.imageVersions={...db.imageVersions,...j.imageVersions,...liveImageVersions};db=j;lastPayloadText=payload;rebuildIndexes();renderActive();saveCachedData(j)}setStatus('최신 Google Sheets 반영 · '+new Date().toLocaleTimeString(),'ok');startImageRefresh(force);
  }catch(e){if(['INVALID_SESSION','USER_NOT_FOUND','AUTH_REQUIRED','APPROVAL_PENDING','ACCESS_REVOKED'].includes(e.code)){clearSession();setStatus('로그인 갱신이 필요합니다. 다시 로그인해 주세요.','err');setTimeout(()=>location.reload(),400)}else if(isTransientError(e)){setStatus('서버 연결 지연 · 저장된 데이터를 표시 중입니다.','')}else setStatus('동기화 실패 · '+e.message,'err')}})().finally(()=>{syncPromise=null});return syncPromise;
