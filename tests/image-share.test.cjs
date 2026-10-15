@@ -32,14 +32,14 @@ test('concurrent shares do not open multiple native sheets',async()=>{
  const first=t.context.shareImageBlob({},'a.png','a');
  assert.match(await t.context.shareImageFile(t.context.cachedImageShare('a')),/이미/);finish();await first;
 });
-test('product titles and filenames contain no line breaks',async()=>{
+test('product sharing sends only the image with no product number metadata',async()=>{
  const t=setup();let data;t.context.navigator.share=async value=>data=value;
  await t.context.shareImageBlob({},'N400\nN401.png','product');
- assert.equal(data.title,'N400 N401');assert.equal(data.files[0].name,'N400 N401.png');
+ assert.deepEqual(Object.keys(data),['files']);assert.equal(data.files[0].name,'HYOSAN-image.png');
 });
 test('site image sharing omits title and text, including cached retry',async()=>{
  const t=setup();let data;t.context.navigator.share=async value=>data=value;
- await t.context.shareImageBlob({},'HYOSAN-image.png','site','');
+ await t.context.shareImageBlob({},'HYOSAN-image.png','site');
  assert.deepEqual(Object.keys(data),['files']);
  await t.context.shareImageFile(t.context.cachedImageShare('site'));
  assert.deepEqual(Object.keys(data),['files']);
