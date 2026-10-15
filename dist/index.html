@@ -104,6 +104,7 @@ html,body{overscroll-behavior-y:none}html{height:100%}body{min-height:100%}.pick
 <dialog id="userDialog" hidden aria-hidden="true"><div id="userDialogContent" class="user-admin"></div></dialog>
 <dialog id="installDialog" class="install-dialog" aria-label="앱 설치"><div class="install-dialog-body"><div class="modal-head"><h1>앱 설치</h1><button class="close" onclick="installDialog.close()" aria-label="닫기">×</button></div><div id="installHelp" class="value"></div><div class="actions"><button class="btn" onclick="installDialog.close()">확인</button></div></div></dialog>
 <script src="assets/image-share.js"></script>
+<script src="assets/image-recovery.js"></script>
 <script>
 const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbyiUawKvrT80mA7ClIg-WsBAKDg88sBwct8uasyn2R2o6ixLaM69eLEviyexyMTK_hv/exec',SYNC_MS:1800000,SYNC_TIMEOUT_MS:60000,AUTH_TIMEOUT_MS:45000,EXPORT_TIMEOUT_MS:120000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:8};
 const DATA_KEYS=['patterns','lpm','specialSpecs','emboss','sites'];
@@ -174,10 +175,10 @@ function imageUrl(u){
  return raw;
 }
 function imageUrls(value){const values=Array.isArray(value)?value:[value],key=values.map(v=>String(v||'')).join('\u001f'),cached=imageListCache.get(key);if(cached)return cached;const urls=[...new Set(values.flatMap(v=>String(v||'').split(/[\r\n,;|]+/)).map(v=>v.trim()).filter(v=>/^https?:\/\//i.test(v)).map(imageUrl))],result=urls.length?urls:[imageUrl('')];imageListCache.set(key,result);return result}
-function modalImageUrl(value){try{const url=new URL(value);if(/(^|\.)drive\.google\.com$/i.test(url.hostname)&&url.pathname==='/thumbnail')url.searchParams.set('sz','w4096');return url.href}catch(e){return value}}
+function modalImageUrl(value){try{const url=new URL(value);if(/(^|\.)drive\.google\.com$/i.test(url.hostname)&&url.pathname==='/thumbnail')url.searchParams.set('sz',matchMedia('(any-pointer:coarse)').matches?'w2048':'w4096');return url.href}catch(e){return value}}
 function previewImageUrl(value){try{const url=new URL(value);if(url.hostname==='drive.google.com'&&url.pathname==='/thumbnail')url.searchParams.set('sz','w640');return url.href}catch(e){return value}}
 const safeImg=u=>esc(previewImageUrl(imageUrls(u)[0]));
-function driveFileId(value){try{const url=new URL(String(value||''));if(!/(^|\.)drive\.google\.com$/i.test(url.hostname)&&!/(^|\.)drive\.usercontent\.google\.com$/i.test(url.hostname))return '';const match=url.pathname.match(/^\/file\/d\/([^/]+)/);return (match&&match[1])||url.searchParams.get('id')||''}catch(e){return ''}}
+function driveFileId(value){try{const url=new URL(String(value||''));if(url.hostname==='lh3.googleusercontent.com')return url.pathname.match(/^\/d\/([^=/?]+)/)?.[1]||'';if(!/(^|\.)drive\.google\.com$/i.test(url.hostname)&&!/(^|\.)drive\.usercontent\.google\.com$/i.test(url.hostname))return '';const match=url.pathname.match(/^\/file\/d\/([^/]+)/);return (match&&match[1])||url.searchParams.get('id')||''}catch(e){return ''}}
 function triggerImageDownload(url,name){const link=document.createElement('a');link.href=url;link.download=(name||'HYOSAN').replace(/[\\/:*?"<>|]/g,'_');link.rel='noopener';document.body.appendChild(link);link.click();link.remove()}
 function setStatus(t,kind=''){const e=$('#syncStatus');e.textContent=t;e.className='status '+kind}
 async function responseJson(r){
