@@ -135,8 +135,8 @@ function saveTabResume(){
 function recentTabResume(){
  try{const saved=JSON.parse(sessionStorage.getItem(RESUME_KEY)||'null'),now=Date.now();if(!saved||saved.token!==auth.sessionToken||!saved.user?.email||!saved.verifiedAt||now<saved.verifiedAt||now-saved.verifiedAt>RESUME_MAX_AGE)return null;const payload=JSON.parse(atob(auth.sessionToken.split('.')[0].replace(/-/g,'+').replace(/_/g,'/')));if(Number(payload.exp)<=now||String(payload.email).toLowerCase()!==saved.user.email.toLowerCase())return null;return saved}catch(e){return null}
 }
-async function resumeRecentTab(){
- const saved=recentTabResume();if(!saved)return false;const cached=await loadCachedData();if(!cached||!DATA_KEYS.every(k=>Array.isArray(cached[k]))||cached.user?.email!==saved.user.email||!recentTabResume())return false;
+async function resumeRecentTab(load=loadCachedData){
+ const saved=recentTabResume();if(!saved)return false;const cached=await load();if(!cached||!DATA_KEYS.every(k=>Array.isArray(cached[k]))||cached.user?.email!==saved.user.email||!recentTabResume())return false;
  for(const [key,value] of Object.entries(saved.view||{})){if(!(key in state)||key.startsWith('modal'))continue;state[key]=key==='selectedLpmIds'||key==='selectedColorLpmIds'?new Set(value):value}
  const page=qa('.page').find(el=>el.id===saved.page);if(page){qa('.page').forEach(el=>el.classList.toggle('active',el===page));qa('.nav button').forEach(el=>el.classList.toggle('active',el.dataset.page===saved.page));const nav=qa('.nav button').find(el=>el.dataset.page===saved.page);if(nav)$('#pageTitle').textContent=nav.textContent}
  $('#search').value=saved.search||'';updateSearchClear();startApp(saved.user,cached);lastAccessVerifiedAt=saved.verifiedAt;[0,1].forEach(i=>$('#composerExportTitle'+i).value=saved.titles?.[i]||'');setStatus('');requestAnimationFrame(()=>window.scrollTo(0,saved.scrollY||0));syncData();return true;
@@ -150,7 +150,8 @@ function startImageRefresh(force=false){
 }
 async function refreshVisibleImages(){
  if(imageRefreshBusy||document.hidden||!appStarted||$('#accessGate').hidden===false||!(auth.sessionToken||auth.idToken))return;
- const now=Date.now(),ids=[...new Set(qa('img[src]').filter(img=>{const r=img.getBoundingClientRect();return r.width>0&&r.height>0&&r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth}).map(img=>driveFileId(img.src)).filter(id=>id&&now-(imageCheckedAt.get(id)||0)>300000))].slice(0,6);
+ const ids=visibleImageRefreshIds();
+ const now=Date.now();
  if(!ids.length)return;imageRefreshBusy=true;const epoch=imageRefreshEpoch,session=auth.sessionToken;ids.forEach(id=>imageCheckedAt.set(id,now));
  try{
   const result=await apiPost('imageVersions',{ids,force:epoch>0},20000,false);
@@ -161,6 +162,15 @@ async function refreshVisibleImages(){
   if(['INVALID_SESSION','USER_NOT_FOUND','AUTH_REQUIRED','APPROVAL_PENDING','ACCESS_REVOKED'].includes(error.code)){clearSession();retryAccessGate('로그인 권한을 다시 확인해 주세요.');}
   else ids.forEach(id=>imageCheckedAt.set(id,Date.now()-270000));
  }finally{imageRefreshBusy=false}
+}
+function visibleImageRefreshIds(){
+ const now=Date.now(),ids=[],seen=new Set();
+ for(const img of qa('img[src]')){
+  const id=driveFileId(img.src);if(!id||seen.has(id)||now-(imageCheckedAt.get(id)||0)<=300000)continue;
+  const r=img.getBoundingClientRect();if(!(r.width>0&&r.height>0&&r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth))continue;
+  seen.add(id);ids.push(id);if(ids.length===6)break;
+ }
+ return ids;
 }
 function imageUrl(u){
  const raw=String(u||'').trim(),fallback='https://placehold.co/800x600/e7e2d9/555?text=No+Image';
@@ -470,7 +480,7 @@ function restartSyncTimer(){if(syncTimer)clearInterval(syncTimer);syncTimer=setI
 function startApp(user=null,initialData=null){
  if(appStarted)return;appStarted=true;auth.user=user;if(user)auth.required=true;$('#accessGate').hidden=true;document.body.classList.remove('access-locked');startImageRefresh();
  const isAdmin=!!(user&&user.isAdmin),adminButton=$('#userAdminButton'),adminDialog=$('#userDialog');adminButton.hidden=!isAdmin;adminDialog.hidden=!isAdmin;adminDialog.setAttribute('aria-hidden',String(!isAdmin));$('#logoutButton').hidden=!auth.required;
- if(initialData&&DATA_KEYS.every(k=>Array.isArray(initialData[k]))){lastAccessVerifiedAt=Date.now();delete initialData.sessionToken;db=initialData;lastPayloadText=JSON.stringify(db);rebuildIndexes();renderActive();saveCachedData(db);setStatus('최신 Google Sheets 반영 · '+new Date().toLocaleTimeString(),'ok')}
+ if(initialData&&DATA_KEYS.every(k=>Array.isArray(initialData[k]))){delete initialData.sessionToken;db=initialData;lastPayloadText=JSON.stringify(db);rebuildIndexes();renderActive();setStatus('')}
  else loadCachedData().then(cached=>{if(cached&&cached.user?.email===user?.email&&DATA_KEYS.every(k=>Array.isArray(cached[k]))){db=cached;rebuildIndexes();renderActive();setStatus('저장된 데이터를 표시했습니다. 최신 내용을 확인 중…')}}).finally(()=>syncData());restartSyncTimer();if(!isMobileDevice())$('#search').focus();
 }
 function loginStatus(message,isError=false){const el=$('#loginStatus');if(el){el.textContent=message;el.className='login-status'+(isError?' err':'')}}
@@ -492,12 +502,12 @@ function retryAccessGate(message){
  $('#retryAccess').onclick=bootstrapAccess;
 }
 // Cached content is a local preview, never authorization for a server request.
-async function resumeSavedSession(){
+async function resumeSavedSession(load=loadCachedData){
  const token=auth.sessionToken;if(!token)return false;
  let payload;try{const parts=token.split('.');if(parts.length!==2||!parts[1])return false;payload=JSON.parse(atob(parts[0].replace(/-/g,'+').replace(/_/g,'/')))}catch(e){return false}
  const valid=()=>auth.sessionToken===token&&Number.isFinite(Number(payload.exp))&&Number(payload.exp)>Date.now();
  if(!valid()||!payload.email)return false;
- const cached=await loadCachedData();
+ const cached=await load();
  if(!valid()||!cached?.user?.email||String(cached.user.email).toLowerCase()!==String(payload.email).toLowerCase()||!DATA_KEYS.every(k=>Array.isArray(cached[k])))return false;
  startApp(cached.user,cached);lastAccessVerifiedAt=0;setStatus('');
  // Existing sync checks approval and token signature on the server, and locks on rejection.
@@ -507,8 +517,9 @@ async function bootstrapAccess(){
  if(accessPromise)return accessPromise;
  accessPromise=(async()=>{
   await restoreSession();
-  if(await resumeRecentTab())return;
-  if(await resumeSavedSession())return;
+  let startupCache;const loadStartupCache=()=>startupCache||(startupCache=loadCachedData());
+  if(await resumeRecentTab(loadStartupCache))return;
+  if(await resumeSavedSession(loadStartupCache))return;
   if(auth.sessionToken){
    loginStatus('저장된 로그인 정보를 확인하고 있습니다…');
    try{

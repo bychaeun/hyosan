@@ -1,6 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const html=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
-const source=html.slice(html.indexOf('async function resumeSavedSession()'),html.indexOf('async function bootstrapAccess()'));
+const source=html.slice(html.indexOf('async function resumeSavedSession('),html.indexOf('async function bootstrapAccess()'));
 function setup(){
  const token=Buffer.from(JSON.stringify({email:'staff@example.com',exp:Date.now()+86400000})).toString('base64url')+'.signature';
  const calls=[];let cached={user:{email:'staff@example.com'},lpm:[]};
