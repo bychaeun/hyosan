@@ -3,7 +3,7 @@ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 function fn(name){const start=html.search(new RegExp('(?:async )?function '+name+'\\('));const tail=html.slice(start),end=tail.search(/\r?\n(?:async )?function /);return end<0?tail:tail.slice(0,end)}
 function context(code=''){
  const backing=new Map(),local=new Map();const store={put(v,k){const request={};queueMicrotask(()=>{backing.set(k,v);request.onsuccess?.()});return request},delete(k){const request={};queueMicrotask(()=>{backing.delete(k);request.onsuccess?.()});return request},get(k){const request={};queueMicrotask(()=>{request.result=backing.get(k);request.onsuccess?.()});return request}};
- const c=vm.createContext({console,queueMicrotask,resumeRecentTab:async()=>false,localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},cacheDb:async()=>({transaction:()=>({objectStore:()=>store})}),auth:{sessionToken:'',idToken:'',user:null},Promise});
+ const c=vm.createContext({console,queueMicrotask,resumeRecentTab:async()=>false,resumeSavedSession:async()=>false,localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},cacheDb:async()=>({transaction:()=>({objectStore:()=>store})}),auth:{sessionToken:'',idToken:'',user:null},Promise});
  vm.runInContext('let sessionPersistence=Promise.resolve();'+['rememberSession','restoreSession','clearSession'].map(fn).join('\n')+code,c);return {c,backing,local};
 }
 test('session is backed up, restored after localStorage loss and explicitly erased on logout',async()=>{

@@ -491,11 +491,24 @@ function retryAccessGate(message){
  const form=$('#accessForm');form.className='access-panel google-gate';form.innerHTML='<img class="access-logo" src="assets/hyosan-lpl-logo-full.svg" alt="HYOSAN LPL"><h1 id="accessTitle">HYOSAN LPM Library</h1><p class="login-help">'+esc(message)+'</p><button class="btn" id="retryAccess" type="button">다시 연결</button><p id="loginStatus" class="login-status" role="status"></p>';
  $('#retryAccess').onclick=bootstrapAccess;
 }
+// Cached content is a local preview, never authorization for a server request.
+async function resumeSavedSession(){
+ const token=auth.sessionToken;if(!token)return false;
+ let payload;try{const parts=token.split('.');if(parts.length!==2||!parts[1])return false;payload=JSON.parse(atob(parts[0].replace(/-/g,'+').replace(/_/g,'/')))}catch(e){return false}
+ const valid=()=>auth.sessionToken===token&&Number.isFinite(Number(payload.exp))&&Number(payload.exp)>Date.now();
+ if(!valid()||!payload.email)return false;
+ const cached=await loadCachedData();
+ if(!valid()||!cached?.user?.email||String(cached.user.email).toLowerCase()!==String(payload.email).toLowerCase()||!DATA_KEYS.every(k=>Array.isArray(cached[k])))return false;
+ startApp(cached.user,cached);lastAccessVerifiedAt=0;setStatus('');
+ // Existing sync checks approval and token signature on the server, and locks on rejection.
+ syncData();return true;
+}
 async function bootstrapAccess(){
  if(accessPromise)return accessPromise;
  accessPromise=(async()=>{
   await restoreSession();
   if(await resumeRecentTab())return;
+  if(await resumeSavedSession())return;
   if(auth.sessionToken){
    loginStatus('저장된 로그인 정보를 확인하고 있습니다…');
    try{
