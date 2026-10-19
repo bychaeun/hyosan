@@ -20,10 +20,30 @@ export function createPhotoSearch(api) {
   if(corner.includes('n'))top=clamp(top+dy,0,bottom-.06);else bottom=clamp(bottom+dy,top+.06,1);
   return {x:left,y:top,w:right-left,h:bottom-top};
  }
- cropBox.onpointerdown=e=>{if(busy||drag||!preview.naturalWidth||e.button!==0||!outline.contains(e.target))return;e.preventDefault();drag={id:e.pointerId,start:point(e),previous:{...crop},corner:e.target.dataset.corner||''};cropBox.setPointerCapture(e.pointerId)};
- cropBox.onpointermove=e=>{if(drag?.id!==e.pointerId)return;const p=point(e);crop=adjust(drag.previous,drag.corner,p.x-drag.start.x,p.y-drag.start.y);showCrop()};
- cropBox.onpointerup=e=>{if(drag?.id!==e.pointerId)return;drag=null;if(cropBox.hasPointerCapture(e.pointerId))cropBox.releasePointerCapture(e.pointerId)};
- cropBox.onpointercancel=()=>{if(drag)crop=drag.previous;drag=null;showCrop()};
+ function startCrop(e,id,touch){
+  if(busy||drag||!preview.naturalWidth)return false;
+  const r=imageRect();if(!r.width||!r.height)return false;
+  const p=point(e),near=touch?32:18;
+  const explicit=e.target?.closest?.('[data-corner]')?.dataset.corner;
+  let corner=explicit||'';
+  if(touch&&!corner){let best=near;for(const [name,x,y] of [['nw',crop.x,crop.y],['ne',crop.x+crop.w,crop.y],['sw',crop.x,crop.y+crop.h],['se',crop.x+crop.w,crop.y+crop.h]]){const d=Math.hypot((p.x-x)*r.width,(p.y-y)*r.height);if(d<best){best=d;corner=name}}}
+  const inside=p.x>=crop.x&&p.x<=crop.x+crop.w&&p.y>=crop.y&&p.y<=crop.y+crop.h;
+  drag={id,start:p,previous:{...crop},corner,mode:corner?'resize':touch&&inside?'move':'draw'};
+  return true;
+ }
+ function moveCrop(e){const p=point(e);if(drag.mode==='draw')crop={x:Math.min(p.x,drag.start.x),y:Math.min(p.y,drag.start.y),w:Math.abs(p.x-drag.start.x),h:Math.abs(p.y-drag.start.y)};else crop=adjust(drag.previous,drag.corner,p.x-drag.start.x,p.y-drag.start.y);showCrop()}
+ function endCrop(cancel=false){if(!drag)return;if(cancel||crop.w<.02||crop.h<.02)crop=drag.previous;drag=null;showCrop()}
+ // Native non-passive touch handling keeps mobile browser scrolling from cancelling selection.
+ cropBox.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.changedTouches[0];if(startCrop(t,t.identifier,true)){e.preventDefault();e.stopPropagation()}},{passive:false});
+ cropBox.addEventListener('touchmove',e=>{if(!drag)return;const t=[...e.touches].find(t=>t.identifier===drag.id);if(t){e.preventDefault();e.stopPropagation();moveCrop(t)}},{passive:false});
+ cropBox.addEventListener('touchend',e=>{if(drag&&[...e.changedTouches].some(t=>t.identifier===drag.id)){e.preventDefault();endCrop()}},{passive:false});
+ cropBox.addEventListener('touchcancel',()=>endCrop(true));
+ cropBox.onpointerdown=e=>{if(e.pointerType==='touch'||e.button!==0)return;if(startCrop(e,e.pointerId,false)){e.preventDefault();try{cropBox.setPointerCapture(e.pointerId)}catch{}}};
+ cropBox.onpointermove=e=>{if(e.pointerType!=='touch'&&drag?.id===e.pointerId)moveCrop(e)};
+ cropBox.onpointerup=e=>{if(e.pointerType==='touch'||drag?.id!==e.pointerId)return;endCrop();if(cropBox.hasPointerCapture(e.pointerId))cropBox.releasePointerCapture(e.pointerId)};
+ cropBox.onpointercancel=e=>{if(e.pointerType!=='touch')endCrop(true)};
+ cropBox.onlostpointercapture=e=>{if(e.pointerType!=='touch')endCrop()};
+ cropBox.oncontextmenu=e=>e.preventDefault();
  outline.onkeydown=e=>{if(busy||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();const step=e.shiftKey?.05:.01;crop=adjust(crop,e.target.dataset.corner||'',e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0,e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0);showCrop()};
  const summary=document.createElement('section');summary.className='photo-results';summary.hidden=true;summary.setAttribute('aria-label','사진 색상 추천');summary.innerHTML='<div class="photo-result-head"><strong>사진 색상 추천</strong></div><div class="photo-palette" aria-label="사진의 주요 색상"></div><div class="photo-categories" aria-label="추천 패턴 종류"></div><p>색상 참고 점수이며 실제 일치율이 아닙니다. 조명·배경에 영향을 받으며 실제 샘플을 확인해 주세요.</p>';
  api.grid.before(summary);

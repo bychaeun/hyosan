@@ -11,3 +11,4 @@
 .photo-palette button{width:44px;height:36px;min-width:44px;border-radius:7px;border:2px solid #fff;box-shadow:0 0 0 1px #ccc;cursor:pointer}.photo-palette button[aria-pressed="true"]{outline:3px solid #008d42;outline-offset:2px}.photo-palette{gap:10px;padding:4px}
 @media screen and (min-width:901px) and (orientation:landscape){#colorist .color-layout{align-items:start}#colorist .color-layout>.panel:first-child{position:sticky;top:16px}#colorist .color-layout>.panel:nth-child(2){max-height:calc(100dvh - 160px);overflow-y:auto;overscroll-behavior-y:contain;scrollbar-gutter:stable}}
 
+.photo-crop-box,.photo-crop-outline,.photo-crop-handle{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:none}.photo-crop-box{cursor:crosshair}.photo-crop-outline{cursor:crosshair}.photo-crop-handle{width:48px;height:48px;-webkit-appearance:none;appearance:none}@media(pointer:coarse){.photo-crop-outline{cursor:move}}

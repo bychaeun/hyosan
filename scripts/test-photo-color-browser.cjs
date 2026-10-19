@@ -65,7 +65,20 @@ const server=http.createServer((req,res)=>{const file=path.join(root,decodeURICo
    await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
    assert.equal(await page.evaluate(()=>scrollY),scrollBefore);
    const moved=await page.locator('.photo-crop-outline').boundingBox();assert(moved.x>reduced.x+3);
+   
+   // Touch near (not precisely on) the small corner dot must resize without scrolling.
+   const cornerPoint={x:moved.x+moved.width-9,y:moved.y+moved.height-9};
+   await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[cornerPoint]});
+   for(let n=1;n<=5;n++)await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:cornerPoint.x-n*4,y:cornerPoint.y-n*3}]});
+   await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+   const resized=await page.locator('.photo-crop-outline').boundingBox();assert(resized.width<moved.width-10);assert(resized.height<moved.height-8);
+   assert.equal(await page.evaluate(()=>scrollY),scrollBefore);
+   // Desktop starts a NEW rectangle even inside the old selection.
+   await page.mouse.move(resized.x+25,resized.y+30);await page.mouse.down();
+   await page.mouse.move(resized.x+70,resized.y+100,{steps:5});await page.mouse.up();
+   const drawn=await page.locator('.photo-crop-outline').boundingBox();assert(Math.abs(drawn.width-45)<2);assert(Math.abs(drawn.height-70)<2);
    await page.screenshot({path:path.join(root,'tmp-crop-handles-'+width+'.png')});
+
 
    await page.getByRole('button',{name:'분석하기',exact:true}).click();await page.locator('#photoColorDialog').waitFor({state:'hidden'});
    assert.equal(await page.locator('#colorGrid .card h2').first().textContent(),'RED WOOD');
