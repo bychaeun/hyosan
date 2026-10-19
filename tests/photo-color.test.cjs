@@ -1,5 +1,12 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const core=()=>import('../assets/photo-color-core.mjs');
+test('dominant pale base wins over dark accents, and recommendations use that base only',async()=>{
+ const {extractPalette,rank,lab}=await core();const pixels=[];
+ for(let i=0;i<100;i++){const v=i<70?210+(i%3)*8:25;pixels.push(v,v,v,255)}
+ const palette=extractPalette(new Uint8ClampedArray(pixels));assert(palette[0].weight>.65);assert(palette[0].lab.L>80);
+ const entries=[{item:{LPM_ID:'base'},lab:palette[0].lab},{item:{LPM_ID:'shadow'},lab:lab({r:25,g:25,b:25})}];
+ const rows=rank(entries,palette.slice().reverse());assert.equal(rows[0].LPM_ID,'base');assert.equal(rows[0]._photoScore,100);
+});
 test('whole-photo palette preserves proportions and ignores transparent pixels',async()=>{
  const {extractPalette}=await core(),pixels=new Uint8ClampedArray([255,0,0,255,255,0,0,255,255,0,0,255,0,0,255,255,0,255,0,0]);
  const p=extractPalette(pixels);assert.equal(p.length,2);assert.equal(p[0].hex,'#FF0000');assert.equal(p[0].weight,.75);assert.equal(p[1].weight,.25);

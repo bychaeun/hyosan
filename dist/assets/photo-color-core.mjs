@@ -23,9 +23,10 @@ export function extractPalette(pixels) {
 export function category(value){const raw=String(value||'').trim();if(!raw)return {code:'UNCLASSIFIED',label:'미분류'};const s=raw.toUpperCase();for(const [re,code,label] of [[/MARBLE|대리석/,'MARBLE','대리석'],[/WOOD|우드/,'WOOD','우드'],[/FABRIC|TEXTURE|패브릭|텍스처/,'FABRIC','패브릭'],[/STONE|스톤|TILE|타일/,'STONE','스톤 · 타일'],[/SOLID|솔리드/,'SOLID','솔리드']])if(re.test(s))return {code,label};return {code:s,label:raw}}
 export function rank(entries,palette,selected='ALL') {
  if(!palette?.length)return [];
+ const base=palette.reduce((best,p)=>p.weight>best.weight?p:best);
  return entries.filter(x=>selected==='ALL'||category(x.item.Category).code===selected).map(x=>{
-  // Weighted distance to all major colors; score is a reference, not an accuracy probability.
-  const d=palette.reduce((sum,p)=>sum+distance(p.lab,x.lab)*p.weight,0);
+  // Match the most prevalent color group, not a blend with shadows and accents.
+  const d=distance(base.lab,x.lab);
   return {...x.item,_photoDistance:d,_photoScore:Math.round(100*Math.exp(-d/35))};
  }).sort((a,b)=>a._photoDistance-b._photoDistance||String(a.LPM_ID).localeCompare(String(b.LPM_ID))).slice(0,60);
 }

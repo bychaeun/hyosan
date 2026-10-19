@@ -34,6 +34,11 @@ const server=http.createServer((req,res)=>{const file=path.join(root,decodeURICo
    await page.locator('.photo-results').getByRole('button',{name:'스톤 · 타일',exact:true}).click();assert.equal(await page.locator('#colorGrid .card').count(),1);
    await page.locator('#search').fill('not-found');await page.waitForTimeout(250);assert.equal(await page.locator('#colorGrid .card').count(),0);await page.locator('#search').fill('');await page.waitForTimeout(250);
    await page.screenshot({path:path.join(root,'tmp-photo-'+width+'.png')});
+   await page.getByRole('button',{name:'사진 변경',exact:true}).click();
+   await page.locator('[data-input="camera"]').setInputFiles({name:'blue.svg',mimeType:'image/svg+xml',buffer:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><path fill="blue" d="M0 0h200v200H0z"/></svg>')});
+   await page.locator('#photoColorDialog').waitFor({state:'hidden'});
+   await page.locator('.photo-results').getByRole('button',{name:'우드',exact:true}).click();
+   assert.equal(await page.locator('#colorGrid .card h2').first().textContent(),'BLUE WOOD');assert.equal(await page.locator('#hex').textContent(),'#0000FF');
    await page.getByRole('button',{name:'색상환으로 돌아가기'}).click();assert.equal(await page.locator('.photo-results').isVisible(),false);
    await context.close();console.log('Photo workflow passed at '+width+'px');
   }
