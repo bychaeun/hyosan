@@ -1,4 +1,4 @@
-import {extractPalette,brightenPalette,rank} from './photo-color-core.mjs';
+import {extractPalette,brightenPalette,rank,lab} from './photo-color-core.mjs';
 
 export function createPhotoSearch(api) {
  let colorIndex=0,active=false,palette=null,selected='ALL',file=null,url='',generation=0,busy=false,crop={x:0,y:0,w:1,h:1},drag=null;
@@ -53,10 +53,10 @@ export function createPhotoSearch(api) {
  function release(){generation++;file=null;if(url)URL.revokeObjectURL(url);url='';$('.photo-preview').removeAttribute('src');busy=false;$('[data-action="analyze"]').disabled=false}
  function choices(){generation++;busy=false;$('[data-action="analyze"]').disabled=false;$('.photo-choices').hidden=false;$('.photo-review').hidden=true;message('')}
  function reset(){active=false;palette=null;selected='ALL';summary.hidden=true;release()}
- function chosenPalette(){return palette?.[colorIndex]?[{...palette[colorIndex],weight:1}]:palette}
+ function chosenPalette(){const hex=api.getColor(),v=parseInt(hex.slice(1),16);return [{hex,weight:1,lab:lab({r:(v>>16)&255,g:(v>>8)&255,b:v&255})}]}
  function render(){
   if(!active||!palette)return false;
-  summary.hidden=false;api.note.textContent='선택색 · 사진의 약 '+Math.round(palette[colorIndex].weight*100)+'%';buttons(summary.querySelector('.photo-categories'),()=>api.render());
+  summary.hidden=false;api.note.textContent=api.getColor()===palette[colorIndex].hex?'선택색 · 사진의 약 '+Math.round(palette[colorIndex].weight*100)+'%':'사진 색상 조절 중';buttons(summary.querySelector('.photo-categories'),()=>api.render());
   summary.querySelector('.photo-palette').replaceChildren(...palette.map((p,i)=>{const sw=document.createElement('button');sw.type='button';sw.style.background=p.hex;sw.title=p.hex+' · '+Math.round(p.weight*100)+'%';sw.setAttribute('aria-label',sw.title);sw.setAttribute('aria-pressed',String(i===colorIndex));sw.onclick=()=>{colorIndex=i;api.setColor(p.hex);api.render()};return sw}));
   const rows=rank(api.entries(true),chosenPalette(),selected);api.help.textContent=`사진 색상 기준 · ${categories().find(c=>c.code===selected)?.label||selected} · ${rows.length}개${rows.length?'':' — 다른 종류를 선택하거나 검색어를 지워 주세요.'}`;
   api.grid.replaceChildren(...rows.map(item=>{const card=api.card(item),score=document.createElement('div');score.className='photo-score';score.textContent='색상 참고 점수 '+item._photoScore+'/100';card.querySelector('.body').append(score);return card}));api.updateSelection();return true;

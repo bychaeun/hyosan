@@ -82,7 +82,21 @@ const server=http.createServer((req,res)=>{const file=path.join(root,decodeURICo
 
    await page.getByRole('button',{name:'분석하기',exact:true}).click();await page.locator('#photoColorDialog').waitFor({state:'hidden'});
    assert.equal(await page.locator('#colorGrid .card h2').first().textContent(),'RED WOOD');
-   await page.locator('#wheel').click({position:{x:80,y:80}});assert.equal(await page.locator('.photo-results').isVisible(),false);
+   
+   const originalHex=await page.locator('#hex').textContent();
+   assert.equal(await page.locator('#light').inputValue(),'50');assert.equal(await page.locator('#sat').inputValue(),'100');
+   await page.locator('#light').fill('70');await page.locator('#light').dispatchEvent('input');
+   assert.notEqual(await page.locator('#hex').textContent(),originalHex);
+   assert.equal(await page.locator('.photo-results').isVisible(),true);
+   assert.equal(await page.locator('.photo-results .photo-categories .active').textContent(),'우드');
+   await page.locator('#sat').fill('30');await page.locator('#sat').dispatchEvent('input');
+   assert.equal(await page.locator('.photo-results').isVisible(),true);
+   await page.locator('#wheel').click({position:{x:80,y:80}});assert.equal(await page.locator('.photo-results').isVisible(),true);
+   assert.equal(await page.locator('.photo-results .photo-categories .active').textContent(),'우드');
+   await page.locator('.photo-palette button').first().click();assert.equal(await page.locator('#hex').textContent(),originalHex);
+   assert.equal(await page.locator('#light').inputValue(),'50');
+   await page.getByRole('button',{name:'영역 다시 선택',exact:true}).click();assert(await page.locator('.photo-preview').getAttribute('src'));await page.getByRole('button',{name:'닫기',exact:true}).click();
+
    assert.equal(await page.locator('#wheel').evaluate(el=>getComputedStyle(el).touchAction),'none');
    const bounds=await page.locator('#wheel').boundingBox(),before=await page.evaluate(()=>scrollY),priorColor=await page.locator('#hex').textContent(),cdp=await context.newCDPSession(page);
    const point={x:bounds.x+bounds.width*.5,y:bounds.y+bounds.height*.5};
