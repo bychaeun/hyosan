@@ -23,7 +23,7 @@ export function extractPalette(pixels) {
  }
  return centers.filter(c=>c.n>0).sort((a,b)=>b.n-a.n).map(c=>({hex:hex(c),lab:lab(c),weight:c.n/total}));
 }
-export function category(value){const raw=String(value||'').trim();if(!raw)return {code:'UNCLASSIFIED',label:'미분류'};const s=raw.toUpperCase();for(const [re,code,label] of [[/MARBLE|대리석/,'MARBLE','대리석'],[/WOOD|우드/,'WOOD','우드'],[/FABRIC|TEXTURE|패브릭|텍스처/,'FABRIC','패브릭'],[/STONE|스톤|TILE|타일/,'STONE','스톤 · 타일'],[/SOLID|솔리드/,'SOLID','솔리드']])if(re.test(s))return {code,label};return {code:s,label:raw}}
+export function category(value){const raw=String(value||'').trim();if(!raw)return {code:'UNCLASSIFIED',label:'미분류'};const s=raw.toUpperCase();for(const [re,code,label] of [[/WOOD|우드/,'WOOD','우드'],[/FABRIC|TEXTURE|패브릭|텍스처/,'FABRIC','패브릭 · 텍스처'],[/STONE|스톤|TILE|타일|MARBLE|대리석/,'STONE','스톤 · 타일'],[/SOLID|솔리드/,'SOLID','솔리드']])if(re.test(s))return {code,label};return {code:s,label:raw}}
 export function rank(entries,palette,selected='ALL') {
  if(!palette?.length)return [];
  const base=palette.reduce((best,p)=>p.weight>best.weight?p:best);

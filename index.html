@@ -234,7 +234,7 @@ function rebuildIndexes(){
  db.lpm.filter(isActive).forEach(x=>split(x.EmbossPlate_IDs).forEach(id=>{if(!indexes.emboss.has(id))return;const rows=indexes.embossToLpm.get(id)||[];rows.push(x);indexes.embossToLpm.set(id,rows)}));
  indexes.colors=db.lpm.filter(x=>/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(x.ColorHex)&&isActive(x)).map(item=>({item,lab:rgbLab(hexRgb(item.ColorHex))}));
 }
-function searchableText(x){let text=searchIndex.get(x);if(!text){text=Object.entries(x).filter(([key])=>!/(^|_)IDs?$/i.test(key)&&!/URL/i.test(key)).map(([,value])=>String(value??'')).join(' ').toLowerCase();searchIndex.set(x,text)}return text}
+function searchableText(x){let text=searchIndex.get(x);if(!text){text=Object.entries(x).filter(([key])=>!/(^|_)IDs?$/i.test(key)&&!/URL/i.test(key)).map(([,value])=>String(value??'')).join(' ').toLowerCase();const aliases=[PATTERN_LABELS[patternCategoryCode(x)],LPM_CATEGORY_LABELS[lpmCategoryCode(x)],LPM_BOOK_LABELS[sampleBookCode(x)]];text+=' '+aliases.filter(Boolean).join(' ').toLowerCase();searchIndex.set(x,text)}return text}
 function searchOK(x){const q=$('#search').value.trim().toLowerCase();return !q||searchableText(x).includes(q)}
 function isActive(x){return String(x.Active??'').trim().toUpperCase()!=='FALSE'}
 function tabs(el,items,active,cb){el.innerHTML='';items.forEach(x=>{const b=document.createElement('button');b.textContent=x.label;b.className=x.code===active?'active':'';b.onclick=()=>cb(x.code);el.appendChild(b)})}
@@ -243,14 +243,14 @@ const LPM_BOOK_LABELS={SOLID_BOOK:'솔리드',SCHATT_COLLAB_:'샤트콜라보',E
 const LPM_CATEGORY_LABELS={WOOD:'우드',SOLID:'솔리드',STONE:'스톤 · 타일',FABRIC:'패브릭 · 텍스처',OTHER:'기타'};
 function compactCode(value){return String(value||'').trim().toUpperCase().replace(/[\s·._-]+/g,'')}
 function patternCategoryCode(x){return compactCode(x.PrimaryCategory)}
-function patternCategories(){const found=new Map();db.patterns.filter(isActive).forEach(x=>{const value=String(x.PrimaryCategory||'').trim(),code=patternCategoryCode(x);if(code&&!found.has(code))found.set(code,PATTERN_LABELS[code]||value)});return [{code:'ALL',label:'전체'},...[...found].map(([code,label])=>({code,label}))]}
+function patternCategories(){const found=new Map();db.patterns.filter(isActive).forEach(x=>{const value=String(x.PrimaryCategory||'').trim(),code=patternCategoryCode(x);if(code&&!found.has(code))found.set(code,code)});return [{code:'ALL',label:'전체'},...[...found].map(([code,label])=>({code,label}))]}
 function sampleBookValue(x){return x.SampleBook||x.SampleBookType||x.Collection||x.Series||x.Book||''}
 function sampleBookCode(x){const raw=compactCode(sampleBookValue(x));if(!raw)return '';if(['샤트콜라보','SCHATTCOLLAB','CHARTCOLLAB'].includes(raw))return 'SCHATT_COLLAB_';if(['기존','기존2021','EXISTING','EXISTING2021','2021'].includes(raw))return 'EXISTING_2021';if(['신규','신규2022','NEW','NEW2022','2022'].includes(raw))return 'NEW_2022';if(['솔리드','SOLID','SOLIDBOOK'].includes(raw))return 'SOLID_BOOK';return raw}
 function lpmBookLabel(x){const code=sampleBookCode(x);return LPM_BOOK_LABELS[code]||sampleBookValue(x)||'-'}
 function lpmCategoryCode(x){const raw=compactCode(x.Category);if(!raw)return '';if(raw.includes('WOOD')||raw.includes('우드'))return 'WOOD';if(raw.includes('SOLID')||raw.includes('솔리드'))return 'SOLID';if(raw.includes('STONE')||raw.includes('TILE')||raw.includes('MARBLE')||raw.includes('스톤')||raw.includes('타일')||raw.includes('대리석'))return 'STONE';if(raw.includes('FABRIC')||raw.includes('TEXTURE')||raw.includes('패브릭')||raw.includes('텍스처'))return 'FABRIC';if(raw.includes('OTHER')||raw.includes('기타'))return 'OTHER';return raw}
 function dynamicLpmCategories(valueOf,codeOf,defaults){const found=new Map();db.lpm.filter(isActive).forEach(x=>{const value=String(valueOf(x)||'').trim(),code=codeOf(x);if(code&&!found.has(code))found.set(code,defaults[code]||value)});return [{code:'ALL',label:'전체'},...[...found].map(([code,label])=>({code,label}))]}
 function lpmBookCategories(){return dynamicLpmCategories(sampleBookValue,sampleBookCode,LPM_BOOK_LABELS)}
-function lpmCategories(){return dynamicLpmCategories(x=>x.Category,lpmCategoryCode,LPM_CATEGORY_LABELS)}
+function lpmCategories(){return dynamicLpmCategories(x=>x.Category,lpmCategoryCode,{}).map(x=>({...x,label:x.code==='ALL'?'전체':x.code}))}
 function specialMajorValue(x){return String(x.MajorCategory||x.Category||'').trim()||'미분류'}
 function specialSubValue(x){return String(x.SubCategory||'').trim()||'미분류'}
 function specialMajorCode(x){return compactCode(specialMajorValue(x))}

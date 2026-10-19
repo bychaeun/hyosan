@@ -49,7 +49,24 @@ const server=http.createServer((req,res)=>{const file=path.join(root,decodeURICo
    assert.equal(await page.locator('#colorGrid .card h2').first().textContent(),'BLUE WOOD');
    assert.equal(await page.locator('.photo-results .photo-categories').isVisible(),true);
    await page.getByRole('button',{name:'영역 다시 선택',exact:true}).click();
-   await page.locator('[data-axis="w"]').fill('50');await page.locator('[data-axis="w"]').dispatchEvent('change');
+   
+   assert.deepEqual(await page.locator('.photo-review .photo-categories button').allTextContents(),['전체','우드','솔리드','스톤 · 타일','패브릭 · 텍스처']);
+   assert.equal(await page.locator('.photo-crop-coordinates').count(),0);
+   const cropBounds=await page.locator('.photo-crop-outline').boundingBox();
+   const handle=await page.locator('[data-corner="se"]').boundingBox();
+   await page.mouse.move(handle.x+handle.width/2,handle.y+handle.height/2);await page.mouse.down();
+   await page.mouse.move(cropBounds.x+cropBounds.width*.5,cropBounds.y+cropBounds.height,{steps:8});await page.mouse.up();
+   const reduced=await page.locator('.photo-crop-outline').boundingBox();assert(reduced.width<cropBounds.width*.6);
+   // Move the selected rectangle using touch, without scrolling the page.
+   const touch=await context.newCDPSession(page),scrollBefore=await page.evaluate(()=>scrollY);
+   const center={x:reduced.x+reduced.width/2,y:reduced.y+reduced.height/2};
+   await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[center]});
+   await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:center.x+8,y:center.y}]});
+   await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+   assert.equal(await page.evaluate(()=>scrollY),scrollBefore);
+   const moved=await page.locator('.photo-crop-outline').boundingBox();assert(moved.x>reduced.x+3);
+   await page.screenshot({path:path.join(root,'tmp-crop-handles-'+width+'.png')});
+
    await page.getByRole('button',{name:'분석하기',exact:true}).click();await page.locator('#photoColorDialog').waitFor({state:'hidden'});
    assert.equal(await page.locator('#colorGrid .card h2').first().textContent(),'RED WOOD');
    await page.locator('#wheel').click({position:{x:80,y:80}});assert.equal(await page.locator('.photo-results').isVisible(),false);
