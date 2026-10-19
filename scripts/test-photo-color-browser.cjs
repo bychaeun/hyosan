@@ -9,7 +9,7 @@ const server=http.createServer((req,res)=>{const file=path.join(root,decodeURICo
  try{
   browser=await chromium.launch({headless:true,channel:'chrome'});
   for(const width of [390,1024]){
-   const context=await browser.newContext({viewport:{width,height:844},serviceWorkers:'block'});const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+   const context=await browser.newContext({viewport:{width,height:844},hasTouch:true,serviceWorkers:'block'});const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/*',route=>{const u=route.request().url();if(u.startsWith(origin))return route.continue();if(u.startsWith('https://script.google.com/')){let body={};try{body=JSON.parse(route.request().postData()||'{}')}catch{}return route.fulfill({json:body.action==='data'?data:body.action==='imageVersions'?{imageVersions:{}}:{user}})}return route.abort()});
    await page.addInitScript(()=>localStorage.setItem('hyosan-session','fixture-session'));
    if(width===1024)await page.addInitScript(()=>{window.createImageBitmap=undefined});
@@ -34,12 +34,21 @@ const server=http.createServer((req,res)=>{const file=path.join(root,decodeURICo
    await page.locator('.photo-results').getByRole('button',{name:'스톤 · 타일',exact:true}).click();assert.equal(await page.locator('#colorGrid .card').count(),1);
    await page.locator('#search').fill('not-found');await page.waitForTimeout(250);assert.equal(await page.locator('#colorGrid .card').count(),0);await page.locator('#search').fill('');await page.waitForTimeout(250);
    await page.screenshot({path:path.join(root,'tmp-photo-'+width+'.png')});
-   await page.getByRole('button',{name:'사진 변경',exact:true}).click();
+   assert.equal(await page.getByRole('button',{name:'사진 변경',exact:true}).count(),0);
+   assert.equal(await page.getByRole('button',{name:'색상환으로 돌아가기'}).count(),0);
+   await page.locator('#photoColorAdd').click();
    await page.locator('[data-input="camera"]').setInputFiles({name:'blue.svg',mimeType:'image/svg+xml',buffer:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><path fill="blue" d="M0 0h200v200H0z"/></svg>')});
    await page.locator('#photoColorDialog').waitFor({state:'hidden'});
    await page.locator('.photo-results').getByRole('button',{name:'우드',exact:true}).click();
    assert.equal(await page.locator('#colorGrid .card h2').first().textContent(),'BLUE WOOD');assert.equal(await page.locator('#hex').textContent(),'#0000FF');
-   await page.getByRole('button',{name:'색상환으로 돌아가기'}).click();assert.equal(await page.locator('.photo-results').isVisible(),false);
+   await page.locator('#wheel').click({position:{x:80,y:80}});assert.equal(await page.locator('.photo-results').isVisible(),false);
+   assert.equal(await page.locator('#wheel').evaluate(el=>getComputedStyle(el).touchAction),'none');
+   const bounds=await page.locator('#wheel').boundingBox(),before=await page.evaluate(()=>scrollY),priorColor=await page.locator('#hex').textContent(),cdp=await context.newCDPSession(page);
+   const point={x:bounds.x+bounds.width*.5,y:bounds.y+bounds.height*.5};
+   await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
+   for(let step=1;step<=6;step++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:point.x+step*5,y:point.y-step*7}]});
+   await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+   assert.equal(await page.evaluate(()=>scrollY),before);assert.notEqual(await page.locator('#hex').textContent(),priorColor);
    await context.close();console.log('Photo workflow passed at '+width+'px');
   }
   assert.deepEqual(errors,[]);

@@ -7,6 +7,8 @@ export function lab({r,g,b}) {
 }
 export const distance=(a,b)=>Math.hypot(a.L-b.L,a.a-b.a,a.b-b.b);
 export const hex=rgb=>'#'+[rgb.r,rgb.g,rgb.b].map(v=>Math.round(v).toString(16).padStart(2,'0')).join('').toUpperCase();
+// Apply once after extraction, not on re-render/category changes. Clamp highlights.
+export function brightenPalette(palette){return palette.map(p=>{const channels=p.hex.slice(1).match(/../g).map(v=>Math.min(255,Math.round(parseInt(v,16)*1.1))),rgb={r:channels[0],g:channels[1],b:channels[2]};return {...p,hex:hex(rgb),lab:lab(rgb)}})}
 export function extractPalette(pixels) {
  const buckets=new Map();let total=0;
  for(let i=0;i<pixels.length;i+=4){if(pixels[i+3]<128)continue;const r=pixels[i],g=pixels[i+1],b=pixels[i+2],key=(r>>4)*256+(g>>4)*16+(b>>4);let v=buckets.get(key);if(!v)buckets.set(key,v={r:0,g:0,b:0,n:0});v.r+=r;v.g+=g;v.b+=b;v.n++;total++}
