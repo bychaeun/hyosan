@@ -19,8 +19,9 @@ function runIndexSync_(dryRun){
     if(!sources.length)throw new Error('유효한 종이넘버가 없습니다. 원본 엑셀의 A:Q 구조를 확인하세요.');
     const images=readIndexImages_(),sheet=SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(LPM_SHEET);
     if(!sheet)throw new Error('대상 시트가 없습니다.');
-    const last=sheet.getLastRow(),values=sheet.getRange(1,1,Math.max(last,1),13).getDisplayValues();validateIndexHeaders_(values[0]);
-    const formulas=last>1?sheet.getRange(2,1,last-1,13).getFormulas():[],plan=planIndexSync_(values.slice(1),sources,images);
+    const last=sheet.getLastRow(),values=sheet.getRange(1,1,Math.max(last,1),Math.max(13,sheet.getLastColumn())).getDisplayValues();validateIndexHeaders_(values[0]);
+    const manualColumn=values[0].findIndex(h=>['ManualManaged','수동관리'].includes(String(h).trim()));
+    const formulas=last>1?sheet.getRange(2,1,last-1,13).getFormulas():[],plan=planIndexSync_(values.slice(1),sources,images,manualColumn);
     plan.updates.forEach(u=>{if(formulas[u.row-2]&&formulas[u.row-2][u.col-1])throw new Error('자동 갱신 대상에 수식이 있습니다: '+u.row+'행 '+u.col+'열')});
     if(!dryRun){
       if(!values[0][12])sheet.getRange(1,13).setValue('인덱스 변경 내용');
@@ -73,7 +74,7 @@ function mergeImageUrls_(existing,images){
   const urls=String(existing||'').split(/[\r\n,;|]+/).map(v=>v.trim()).filter(Boolean),seen=new Set(urls.map(v=>driveImageId_(v)||v));
   images.forEach(im=>{const key=im.id||driveImageId_(im.url)||im.url;if(!seen.has(key)){urls.push(im.url);seen.add(key)}});return urls.join('\n');
 }
-function planIndexSync_(rows,sources,images){
+function planIndexSync_(rows,sources,images,manualColumn=-1){
   const groups=new Map(),present=new Set(),updates=[],additions=[];let ambiguousImages=0;
   sources.forEach(s=>{const key=indexNorm_(s.paper);if(!key)return;if(!groups.has(key))groups.set(key,{paper:s.paper,current:[],previous:[],companies:[],count:0});const g=groups.get(key);g.count++;g.current.push(...splitIndexNames_(s.current));g.previous.push(...(s.previous||[]).flatMap(splitIndexNames_));if(s.company)g.companies.push(s.company)});
   groups.forEach(g=>{g.current=uniqueIndex_(g.current);g.previous=uniqueIndex_(g.previous).filter(p=>!g.current.some(n=>indexNorm_(n)===indexNorm_(p)));g.companies=uniqueIndex_(g.companies)});
@@ -102,6 +103,7 @@ function planIndexSync_(rows,sources,images){
     const image=imageFor(paper,splitIndexNames_(r[1]).concat(splitIndexNames_(r[2]),g?g.current.concat(g.previous):[]));
     if(image.warning)messages.push(image.warning);
     if(image.images.length){const urls=mergeImageUrls_(r[10],image.images);if(urls!==String(r[10]||''))updates.push({row:i+2,col:11,value:urls})}
+    if(manualColumn>=0&&/^(true|1|yes|수동)$/i.test(String(r[manualColumn]||'').trim()))return;
     const status=messages.join('\n');if(status!==String(r[12]||''))updates.push({row:i+2,col:13,value:status});
   });
   let next=rows.reduce((max,r)=>Math.max(max,Number((String(r[0]||'').match(/(\d+)$/)||[])[1]||0)),0)+1;

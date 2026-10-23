@@ -6,6 +6,13 @@ const path=require('node:path');
 const context=vm.createContext({console});
 vm.runInContext(fs.readFileSync(path.join(__dirname,'../Code.gs'),'utf8')+'\n'+fs.readFileSync(path.join(__dirname,'../IndexSync.gs'),'utf8'),context);
 const headers=['LPM_ID','ProductName','PreviousNames','SampleBook','Category','Other','ImageURL','PaperNumber','BasePaperCompany','Active','Custom','Spare','인덱스 변경 내용'];
+test('manual rows keep product fields, notes and colors while receiving images',()=>{
+  const names=headers.concat('ManualManaged');
+  const sheet=new Sheet([{LPM_ID:'LPM-1',ProductName:'CUSTOM',PaperNumber:'P1',ManualManaged:'TRUE','인덱스 변경 내용':'내 메모'}],names);
+  context.reconcileLpmRows_(sheet,[{paper:'P1',current:'INDEX',previous:[],company:'C'}],[{name:'P1',id:'image'}]);
+  assert.equal(sheet.data[1][1],'CUSTOM');assert.equal(sheet.data[1][12],'내 메모');
+  assert.equal(sheet.colors[2],undefined);assert.match(sheet.data[1][6],/image/);
+});
 class Sheet{
   constructor(records=[],names=headers){
     this.data=[names.slice(),...records.map(record=>names.map(name=>record[name]??''))];

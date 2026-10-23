@@ -96,6 +96,8 @@ function lpmColumns_(sheet){
     if(matches[0]===13)throw new Error('M열이 '+name+' 열입니다. M열을 상태 전용으로 정리한 뒤 실행해 주세요.');
   });
   if(headers[12]&&!['인덱스 변경 내용','자동화 상태'].includes(headers[12]))throw new Error('M열에 기존 항목이 있습니다: '+headers[12]+'. 상태 전용 열인지 확인해 주세요.');
+  const manual=headers.findIndex(h=>['ManualManaged','수동관리'].includes(h));
+  if(manual>=0)columns.ManualManaged=manual+1;
   return columns;
 }
 function reconcileLpmRows_(sheet,sourceRows,images){
@@ -104,6 +106,7 @@ function reconcileLpmRows_(sheet,sourceRows,images){
   const original=values.map(row=>Array.from({length:width},(_,i)=>row[i]||''));
   const rows=original.map(row=>row.slice()),colors=new Map(),byPaper=new Map();
   const get=(row,key)=>row[cols[key]-1];
+  const isManual=row=>/^(true|1|yes|수동)$/i.test(String(get(row,'ManualManaged')||'').trim());
   const set=(row,key,value)=>{row[cols[key]-1]=value};
   rows.forEach((row,i)=>{const key=indexNorm_(get(row,'PaperNumber'));if(key)indexMapAdd_(byPaper,key,i)});
   let nextId=rows.reduce((n,row)=>Math.max(n,Number((String(get(row,'LPM_ID')).match(/(\d+)$/)||[])[1]||0)),0)+1;
@@ -116,6 +119,7 @@ function reconcileLpmRows_(sheet,sourceRows,images){
     return i;
   };
   const status=(row,kind,text)=>{
+    if(isManual(row))return;
     const prefix='['+kind+'] ';
     const keep=String(row[12]||'').split('\n').filter(line=>line&&!line.startsWith(prefix));
     if(text)keep.push(prefix+text);
@@ -132,6 +136,7 @@ function reconcileLpmRows_(sheet,sourceRows,images){
       const indices=byPaper.get(key)||[newRow(group[0].paper)];
       indices.forEach(i=>{
         const row=rows[i],before=row.slice(),company=indexCompanyNorm_(get(row,'BasePaperCompany'));
+        if(isManual(row))return;
         let matches=group;
         // A paper number may be reused by different manufacturers.
         if(company){
@@ -237,7 +242,7 @@ function reconcileLpmRows_(sheet,sourceRows,images){
   });
   // At most one Sheets formatting call per color, instead of one per product.
   const colorRanges=new Map();
-  colors.forEach((color,i)=>indexMapAdd_(colorRanges,color,'A'+(i+2)+':'+indexColumnLabel_(width)+(i+2)));
+  colors.forEach((color,i)=>{if(!isManual(rows[i]))indexMapAdd_(colorRanges,color,'A'+(i+2)+':'+indexColumnLabel_(width)+(i+2))});
   colorRanges.forEach((ranges,color)=>sheet.getRangeList(ranges).setBackground(color));
   return result;
 }

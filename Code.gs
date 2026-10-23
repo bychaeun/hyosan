@@ -146,7 +146,7 @@ function setUserStatus_(admin,email,status){
 function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관리자 권한이 필요합니다.','ADMIN_REQUIRED')}
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
-const DATA_CACHE_PREFIX='library-data-v14-';
+const DATA_CACHE_PREFIX='library-data-v15-';
 function readDataCache_(cache){
   try{
     const meta=JSON.parse(cache.get(DATA_CACHE_PREFIX+'meta')||'null');if(!meta||!meta.count)return null;
@@ -220,12 +220,30 @@ function imageVersionBatch_(requested,force){
   }
   return versions;
 }
+// Keep older published clients compatible while sites store LPM IDs and emboss separately.
+function integrateSiteSpecs_(out){
+  const byId=new Map(out.lpm.map(x=>[x.LPM_ID,x]));
+  const lines=v=>String(v||'').split(/\r?\n/).map(s=>s.trim());
+  out.sites.forEach(site=>{
+    if(!site.LinkedLPM_IDs)return;
+    const names=lines(site.SpecialSpecNumbers),ids=lines(site.LinkedLPM_IDs),emboss=lines(site.EmbossNames),refs=[];
+    site.SpecialSpecNumbers=names.map((name,i)=>{
+      if(!name){refs.push('');return ''}
+      const label=name.replace(/^\[|\]$/g,'').replace(/\([^)]*\)/g,'').trim()+(emboss[i]?' ('+emboss[i]+')':'');
+      const item=byId.get(ids[i]),id='SITE:'+site.Construction_ID+':'+i;refs.push(id);
+      if(item)out.specialSpecs.push({SpecialSpec_ID:id,SpecialSpecNumber:label,LinkedLPM_ID:item.LPM_ID,PaperNumber:item.PaperNumber,ImageURL:item.ImageURL,EmbossType:emboss[i]||'',SubCategory:item.Category,Active:item.Active});
+      return label;
+    }).join('\n');
+    site.LinkedSpecialSpec_IDs=refs.join('\n');
+  });
+}
 function getAllData_(forceRefresh){
   const cache=CacheService.getScriptCache(),cached=forceRefresh?null:readDataCache_(cache);
   if(cached)return cached;
   const names=[SHEET_NAMES.patterns,SHEET_NAMES.lpm,SHEET_NAMES.specialSpecs,SHEET_NAMES.emboss,SHEET_NAMES.sites,SHEET_NAMES.config,'RELATIONS'];
   const tables=readSheetsBatch_(names);
   const out={patterns:tables[SHEET_NAMES.patterns]||[],lpm:tables[SHEET_NAMES.lpm]||[],specialSpecs:tables[SHEET_NAMES.specialSpecs]||[],emboss:tables[SHEET_NAMES.emboss]||[],sites:tables[SHEET_NAMES.sites]||[],config:{}};
+  integrateSiteSpecs_(out);
   const publicConfig=['LIBRARY_TITLE','SYNC_INTERVAL_SECONDS','COLOR_TOLERANCE_PERCENT','VERSION'];
   (tables[SHEET_NAMES.config]||[]).forEach(r=>{if(r.KEY)out.config[r.KEY]=r.VALUE});
   out.patterns.forEach(item=>{delete item.RelatedLPM_IDs;delete item.RecommendedEmbossPlate_IDs});
