@@ -146,7 +146,7 @@ function setUserStatus_(admin,email,status){
 function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관리자 권한이 필요합니다.','ADMIN_REQUIRED')}
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
-const DATA_CACHE_PREFIX='library-data-v13-';
+const DATA_CACHE_PREFIX='library-data-v14-';
 function readDataCache_(cache){
   try{
     const meta=JSON.parse(cache.get(DATA_CACHE_PREFIX+'meta')||'null');if(!meta||!meta.count)return null;
@@ -250,7 +250,7 @@ function getAllData_(forceRefresh){
   const lpmById=new Map(out.lpm.map(item=>[String(item.LPM_ID||'').trim(),item]));
   const embossById=new Map(out.emboss.map(item=>[String(item.EmbossPlate_ID||'').trim(),item]));
   const patternsByName=nameLookup_(out.patterns,['PatternName_KR','PatternName_EN'],'ID');
-  const lpmByName=nameLookup_(out.lpm,['ProductName','PreviousNames'],'LPM_ID',true);
+  const lpmByName=nameLookup_(out.lpm,['ProductName','PreviousNames','PaperNumber','SpecialNumbers'],'LPM_ID',true);
   const embossByName=nameLookup_(out.emboss,['PlateName'],'EmbossPlate_ID');
   (tables.RELATIONS||[]).forEach(relation=>{
     const patternIds=resolveRelationIds_(relationValue_(relation,['Pattern_Name','PatternName','Pattern_ID']),patternsById,patternsByName),lpmIds=resolveRelationIds_(relationValue_(relation,['LPM_ProductName','LPM_Name','ProductName','LPM_ID']),lpmById,lpmByName),embossIds=resolveRelationIds_(relationValue_(relation,['EmbossPlate_Name','PlateName','EmbossPlate_ID']),embossById,embossByName);
@@ -265,6 +265,8 @@ function readSheet_(ss,name){
   const lastRow=sh.getLastRow(),lastColumn=sh.getLastColumn();if(lastRow<2||lastColumn<1)return [];
   return rowsFromValues_(sh.getRange(1,1,lastRow,lastColumn).getDisplayValues());
 }
+
+function lpmDisplayName_(item){return String(item.ProductName||'').trim()||String(item.PaperNumber||item.PaperNo||item.PatternForm||'').trim()||'-'}
 
 function getLpmsForExport_(lpmIds){
   const ids=Array.from(new Set((Array.isArray(lpmIds)?lpmIds:[lpmIds]).map(v=>String(v||'').trim()).filter(Boolean))).slice(0,50);
@@ -281,7 +283,7 @@ function exportImageUrls_(item){
 
 function exportToSlides_(lpmIds,requesterEmail,cfg){
   cfg=cfg||getConfig_();
-  const items=getLpmsForExport_(lpmIds),title=items.length===1?'HYOSAN LPM Export - '+(items[0].ProductName||items[0].LPM_ID):'HYOSAN LPM Export - '+items.length+' products',destinationId=String(cfg.SLIDES_DESTINATION_ID||'').trim();
+  const items=getLpmsForExport_(lpmIds),title=items.length===1?'HYOSAN LPM Export - '+lpmDisplayName_(items[0]):'HYOSAN LPM Export - '+items.length+' products',destinationId=String(cfg.SLIDES_DESTINATION_ID||'').trim();
   let pres,created=false,destinationWarning='';
   if(destinationId){
     try{pres=SlidesApp.openById(destinationId)}
@@ -300,7 +302,7 @@ function appendLpmSlide_(pres,item,W,H){
   let imageInserted=false;
   try{imageInserted=insertSquareImage_(slide,exportImageUrls_(item),0,(H-imageSize)/2,imageSize)}catch(err){console.warn('Slides image failed for '+item.LPM_ID+': '+err.message)}
   const x=W*.62,w=W*.32;
-  addText_(slide,item.ProductName||'',x,H*.12,w,40,15,true);
+  addText_(slide,lpmDisplayName_(item),x,H*.12,w,40,15,true);
   addText_(slide,'종이 넘버',x,H*.23,w,18,11,true);addText_(slide,item.PaperNumber||item.PaperNo||item.PatternForm||'-',x,H*.28,w,24,8,false);
   addText_(slide,'샘플북',x,H*.39,w,18,11,true);addText_(slide,item.SampleBook||'-',x,H*.44,w,24,8,false);
   addText_(slide,'분류',x,H*.55,w,18,11,true);addText_(slide,item.Category||'-',x,H*.60,w,24,8,false);

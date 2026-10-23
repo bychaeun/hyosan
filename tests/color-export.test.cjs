@@ -17,7 +17,8 @@ function setup(file,urls=['one','two','three']){
   loadComposerExportImage:async(url,size)=>{requests.push({url,size});return {url}},
   drawCoverImage:(ctx,img,x,y)=>positions.push({url:img.url,x,y}),fitCanvasText(){},
   URL:{createObjectURL:()=> 'blob:result',revokeObjectURL(){}},triggerImageDownload:(...args)=>downloads.push(args),setTimeout(){}};
- vm.createContext(sandbox);vm.runInContext(ui+'\n'+fn,sandbox);
+ const names=html.split('\n').filter(line=>/^function (paperNumber|lpmDisplayName)\(/.test(line)).join('\n');
+ vm.createContext(sandbox);vm.runInContext(names+'\n'+ui+'\n'+fn,sandbox);
  return {sandbox,positions,requests,downloads,button,status,canvas};
 }
 for(const file of ['index.html','dist/index.html']){
