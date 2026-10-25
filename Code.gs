@@ -146,7 +146,7 @@ function setUserStatus_(admin,email,status){
 function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관리자 권한이 필요합니다.','ADMIN_REQUIRED')}
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
-const DATA_CACHE_PREFIX='library-data-v15-';
+const DATA_CACHE_PREFIX='library-data-v16-';
 function readDataCache_(cache){
   try{
     const meta=JSON.parse(cache.get(DATA_CACHE_PREFIX+'meta')||'null');if(!meta||!meta.count)return null;
@@ -222,15 +222,19 @@ function imageVersionBatch_(requested,force){
 }
 // Keep older published clients compatible while sites store LPM IDs and emboss separately.
 function integrateSiteSpecs_(out){
-  const byId=new Map(out.lpm.map(x=>[x.LPM_ID,x]));
+  const byId=new Map(out.lpm.map(x=>[x.LPM_ID,x])),aliases=new Map();
   const lines=v=>String(v||'').split(/\r?\n/).map(s=>s.trim());
+  const key=v=>String(v||'').replace(/[\[\]]/g,'').replace(/\([^)]*\)/g,'').replace(/\s+/g,'').toLowerCase();
+  out.lpm.filter(x=>String(x.Active||'').toUpperCase()!=='FALSE').forEach(x=>{
+    new Set(lines(x.SpecialNumbers).map(key).filter(Boolean)).forEach(k=>{const list=aliases.get(k)||[];list.push(x);aliases.set(k,list)});
+  });
   out.sites.forEach(site=>{
-    if(!site.LinkedLPM_IDs)return;
+    if(!site.SpecialSpecNumbers)return;
     const names=lines(site.SpecialSpecNumbers),ids=lines(site.LinkedLPM_IDs),emboss=lines(site.EmbossNames),refs=[];
     site.SpecialSpecNumbers=names.map((name,i)=>{
       if(!name){refs.push('');return ''}
       const label=name.replace(/^\[|\]$/g,'').replace(/\([^)]*\)/g,'').trim()+(emboss[i]?' ('+emboss[i]+')':'');
-      const item=byId.get(ids[i]),id='SITE:'+site.Construction_ID+':'+i;refs.push(id);
+      const matches=aliases.get(key(name))||[],item=byId.get(ids[i])||(matches.length===1?matches[0]:null),id='SITE:'+site.Construction_ID+':'+i;refs.push(item?id:'');
       if(item)out.specialSpecs.push({SpecialSpec_ID:id,SpecialSpecNumber:label,LinkedLPM_ID:item.LPM_ID,PaperNumber:item.PaperNumber,ImageURL:item.ImageURL,EmbossType:emboss[i]||'',SubCategory:item.Category,Active:item.Active});
       return label;
     }).join('\n');

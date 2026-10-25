@@ -1,4 +1,10 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+test('unique aliases resolve automatically; ambiguous aliases stay unlinked',()=>{
+ const c=vm.createContext({});vm.runInContext(fs.readFileSync(__dirname+'/../Code.gs','utf8'),c);
+ const out={lpm:[{LPM_ID:'a',SpecialNumbers:'HS1\nHS2'},{LPM_ID:'b',SpecialNumbers:'HS2'}],specialSpecs:[],sites:[{Construction_ID:'s',SpecialSpecNumbers:'hs 1\nHS2',EmbossNames:'UK\nSC'}]};
+ c.integrateSiteSpecs_(out);assert.equal(out.specialSpecs.length,1);assert.equal(out.specialSpecs[0].LinkedLPM_ID,'a');assert.equal(out.specialSpecs[0].EmbossType,'UK');assert.equal(out.sites[0].LinkedSpecialSpec_IDs,'SITE:s:0\n');
+});
+test('LPM popup displays newline aliases comma-separated',()=>{assert.match(fs.readFileSync(__dirname+'/../index.html','utf8'),/specialNumbers\(x\)\.map\(esc\)\.join\(', '\)/)});
 test('site compatibility preserves blank emboss positions without SPECIAL_SPECS sheet',()=>{
  const c=vm.createContext({});vm.runInContext(fs.readFileSync(__dirname+'/../Code.gs','utf8'),c);
  const out={lpm:[{LPM_ID:'a',PaperNumber:'P',ImageURL:'photo'}],specialSpecs:[],sites:[{Construction_ID:'S',SpecialSpecNumbers:'HS1\nHS2',LinkedLPM_IDs:'a\na',EmbossNames:'\nUK'}]};
