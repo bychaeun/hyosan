@@ -81,13 +81,13 @@ html,body{overscroll-behavior-y:none}html{height:100%}body{min-height:100%}.pick
 #modalContent{height:100%;min-height:0}
 #modal .modal{position:relative;height:100%;max-height:100%;grid-template-columns:48% 52%;grid-template-rows:minmax(0,1fr);overflow:hidden}
 #modal .img-wrap{width:min(100%,calc(100vh - 40px));width:min(100%,calc(100dvh - 40px));height:auto;aspect-ratio:1;align-self:center;justify-self:center;min-width:0;min-height:0;touch-action:none;overscroll-behavior:contain}
-#modal .img-wrap img{position:absolute;inset:0;width:100%;height:100%;min-height:0;object-fit:contain;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#modal .img-wrap img{position:absolute;inset:0;width:100%;height:100%;min-height:0;object-fit:cover;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 #modal .modal-body{min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;padding:54px 22px 22px}
 #modal .modal>.close{position:absolute;z-index:10;top:10px;right:10px;display:grid;place-items:center;flex:none;width:40px;height:40px;padding:0;line-height:1;font-family:Arial,sans-serif;font-size:24px;box-shadow:0 0 0 2px #fff}
 #modal .full-view-btn{right:60px}
 @media(max-width:900px){
- #modal .modal{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
- #modal .img-wrap{width:min(100%,52vh);width:min(100%,52dvh);align-self:start}
+ #modal .modal{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,55%) minmax(0,1fr)}
+ #modal .img-wrap{width:100%;height:100%;aspect-ratio:auto;align-self:stretch}
  #modal .modal-body{padding:18px 16px 24px}
 }
 </style>

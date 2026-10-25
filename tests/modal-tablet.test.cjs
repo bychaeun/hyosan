@@ -1,10 +1,10 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const html=fs.readFileSync(__dirname+'/../index.html','utf8');
 test('tablet dialog has bounded image rows and close button outside scrolling details',()=>{
- assert.match(html,/grid-template-rows:auto minmax\(0,1fr\)/);
+ assert.match(html,/grid-template-rows:minmax\(0,55%\) minmax\(0,1fr\)/);
  assert.match(html,/#modal \.img-wrap\{[^}]*height:auto;aspect-ratio:1/);
- assert.match(html,/width:min\(100%,52dvh\)/);
- assert.match(html,/#modal \.img-wrap img\{position:absolute;[^}]*object-fit:contain/);
+ assert.match(html,/#modal \.img-wrap\{width:100%;height:100%;aspect-ratio:auto/);
+ assert.match(html,/#modal \.img-wrap img\{position:absolute;[^}]*object-fit:cover/);
  assert.match(html,/#modal \.modal>\.close\{position:absolute;z-index:10/);
  assert.match(html,/<\/p><\/div><button class="close" type="button" aria-label="팝업 닫기"/);
  assert.equal(html,fs.readFileSync(__dirname+'/../dist/index.html','utf8'));
