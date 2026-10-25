@@ -1,7 +1,7 @@
 // Standalone HYOSAN INDEX SYNC project. Do not add this file to the web API project.
 const SPREADSHEET_ID='1RC-6ibPA86zaWOGt1rzgmQf9tLpT4OcgdI6K9XcUPTI';
 const LPM_SHEET='HYOSAN_LPM',INDEX_FOLDER='1q_c5qhZr8GpOqVf2MK11v9hwlmoHNFuU',IMAGE_FOLDER='1TgLqm-7qjsDqtSEXVFnPM3cC9shPxGSR';
-const SYNC_VERSION='2026-10-12-multiple-images-hourly-v2';
+const SYNC_VERSION='2026-10-26-manual-row-protection-v3';
 function syncIndexCode(){return runIndexSync_(false)}
 function previewIndexSync(){return runIndexSync_(true)}
 function installIndexSyncTrigger(){
@@ -95,7 +95,8 @@ function planIndexSync_(rows,sources,images,manualColumn=-1){
   };
   rows.forEach((r,i)=>{
     const paper=indexNorm_(r[7]),g=groups.get(paper),messages=[];
-    if(g){
+    const manual=manualColumn>=0&&/^(true|1|yes|수동)$/i.test(String(r[manualColumn]||'').trim());
+    if(g&&!manual){
       if(indexSet_(splitIndexNames_(r[1]))!==indexSet_(g.current))messages.push('제품명: 시트 ['+(r[1]||'없음')+'] / 인덱스 ['+g.current.join(', ')+']');
       if(indexSet_(splitIndexNames_(r[2]))!==indexSet_(g.previous))messages.push('이전제품명: 시트 ['+(r[2]||'없음')+'] / 인덱스 ['+(g.previous.join(', ')||'없음')+']');
       if(indexSet_(splitIndexNames_(r[8]))!==indexSet_(g.companies))messages.push('종이회사: 시트 ['+(r[8]||'없음')+'] / 인덱스 ['+(g.companies.join(', ')||'없음')+']');
@@ -103,7 +104,7 @@ function planIndexSync_(rows,sources,images,manualColumn=-1){
     const image=imageFor(paper,splitIndexNames_(r[1]).concat(splitIndexNames_(r[2]),g?g.current.concat(g.previous):[]));
     if(image.warning)messages.push(image.warning);
     if(image.images.length){const urls=mergeImageUrls_(r[10],image.images);if(urls!==String(r[10]||''))updates.push({row:i+2,col:11,value:urls})}
-    if(manualColumn>=0&&/^(true|1|yes|수동)$/i.test(String(r[manualColumn]||'').trim()))return;
+    if(manual)return;
     const status=messages.join('\n');if(status!==String(r[12]||''))updates.push({row:i+2,col:13,value:status});
   });
   let next=rows.reduce((max,r)=>Math.max(max,Number((String(r[0]||'').match(/(\d+)$/)||[])[1]||0)),0)+1;
