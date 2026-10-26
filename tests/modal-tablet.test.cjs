@@ -1,8 +1,20 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const html=fs.readFileSync(__dirname+'/../index.html','utf8');
+test('icon controls retain accessible names and close button is compact',()=>{
+ for(const id of ['reload','userAdminButton'])assert.match(html,new RegExp('id="'+id+'" aria-label="[^"]+" title="[^"]+"[^>]*><svg'));
+ assert.match(html,/width:36px;height:36px[^}]*box-shadow:none/);
+ assert.match(html,/onclick="downloadCurrentImage\(this\)" aria-label="이미지 저장하기"/);
+});
+test('linked product chips show product labels without changing linked IDs',()=>{
+ const source=html.slice(html.indexOf('function contentWithLpmLinks'),html.indexOf('function ',html.indexOf('function contentWithLpmLinks')+9));
+ const c=vm.createContext({indexes:{lpm:new Map([['LPM-427',{ProductName:'N427'}]])},lpmDisplayName:x=>x.ProductName,esc:s=>String(s).replaceAll('<','&lt;')});
+ vm.runInContext(source,c);
+ const result=c.contentWithLpmLinks('제품 LPM-427 / LPM-999');
+ assert.match(result,/>N427<\/button>/);assert.match(result,/LPM-427/);assert.match(result,/LPM-999/);
+});
 test('tablet dialog has bounded image rows and close button outside scrolling details',()=>{
  assert.match(html,/grid-template-rows:minmax\(0,55%\) minmax\(0,1fr\)/);
- assert.match(html,/#modal \.img-wrap\{[^}]*height:auto;aspect-ratio:1/);
+ assert.match(html,/#modal \.img-wrap\{width:100%;height:100%;aspect-ratio:auto;align-self:stretch/);
  assert.match(html,/#modal \.img-wrap\{width:100%;height:100%;aspect-ratio:auto/);
  assert.match(html,/#modal \.img-wrap img\{position:absolute;[^}]*object-fit:cover/);
  assert.match(html,/#modal \.modal>\.close\{position:absolute;z-index:10/);
