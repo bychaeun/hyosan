@@ -2,7 +2,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const html=fs.readFileSync(__dirname+'/../index.html','utf8');
 test('icon controls retain accessible names and close button is compact',()=>{
  for(const id of ['reload','userAdminButton'])assert.match(html,new RegExp('id="'+id+'" aria-label="[^"]+" title="[^"]+"[^>]*><svg'));
- assert.match(html,/width:36px;height:36px[^}]*box-shadow:none/);
+ assert.match(html,/width:31px;height:31px[^}]*box-shadow:none/);
  assert.match(html,/onclick="downloadCurrentImage\(this\)" aria-label="이미지 저장하기"/);
 });
 test('linked product chips show product labels without changing linked IDs',()=>{
