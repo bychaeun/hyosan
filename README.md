@@ -10,6 +10,8 @@ Google Sheets 데이터를 실시간으로 읽는 효산 내부용 패턴·LPM·
 - `sw.js`: 앱 화면과 브랜드 자산 캐시
 - `Code.gs`: Google Sheets 동기화, 사용자 승인, Google Slides 내보내기
 - `appsscript.json`: Apps Script 권한 설정
+- `OrderBoard.gs`, `assets/order-board.js`, `assets/order-board.css`: 수주현황판 메뉴 (ERP 수주현황판 그대로)
+- `automation/order-sync/`: 사무실 PC에서 ERP 수주현황을 10분마다 웹앱으로 보내는 자동 전송
 
 ## 배포 순서
 
@@ -72,6 +74,25 @@ Apps Script 실행 기록과 스크립트 속성 `INDEX_LAST_RESULT`에서 추�
 - 검색 엔진 노출을 줄이기 위해 `noindex`, `nofollow`, `noarchive` 메타 설정을 사용합니다. 이 설정은 접근 제어를 대신하지 않으며 실제 보안은 서버 인증과 Drive 권한으로 처리합니다.
 
 > 이미지 파일을 먼저 제한하면 기존 화면에서 이미지가 보이지 않을 수 있습니다. 승인된 직원 계정에 이미지 폴더 뷰어 권한을 부여한 뒤 공개 공유를 해제합니다.
+
+## 수주현황판
+
+ERP의 수주현황판(`E:\수주현황판` FoxPro 원본)을 계산·색·크기·배치 규칙까지 그대로 옮긴 메뉴입니다. 모바일 하단 메뉴 이름은 `수주`입니다.
+
+- 데이터 흐름: 업체 ERP DB → 사무실 PC 자동 전송(읽기 전용 계정) → Apps Script `orderBoardPush` → 숨김 시트 `ORDER_BOARD_DATA` → 로그인한 사용자 `orderBoard`
+- 원본 프로시저 `sp_LoadOrderstate2`는 읽기 전용 계정에 실행 권한이 없어, 같은 내용의 `view_orderstate`와 원본 화면 조회(작업지시·출고대기·금일 출고일·사급요청·거래처 분리)를 그대로 사용합니다.
+- 사양 배경색은 `tb_spec.bcolor`, 규격 글자색은 `tb_standard.fcolor` 원본값을 씁니다.
+- 업체 DB(SQL Server 2008 R2 RTM)는 Google Apps Script의 직접 접속(JDBC)을 거부합니다(2026-10-29 확인). 업체가 TLS 1.2 지원 업데이트를 적용하면 PC 없이 Apps Script가 직접 읽도록 바꿀 수 있습니다.
+
+### 처음 적용하기
+
+1. Apps Script에 `OrderBoard.gs`를 추가하고 `Code.gs`를 갱신합니다. 추가 권한은 필요 없습니다.
+2. 편집기에서 `orderBoardSetup`을 한 번 실행하고 실행 로그의 **수주 전송 키**를 확인합니다.
+3. 웹 앱 배포를 **같은 배포의 새 버전**으로 갱신합니다(URL 유지).
+4. 업무 시간에 켜지는 사무실 PC마다 `automation/order-sync` 폴더를 복사해 `설치.bat`을 실행하고, 읽기 전용 DB 계정과 수주 전송 키를 입력합니다. 계정은 그 PC·그 윈도우 계정에서만 풀리게 암호화 저장됩니다.
+5. 여러 PC에 설치해도 됩니다. 켜져 있는 PC가 10분마다 보내고(다른 PC가 8분 안에 보냈으면 DB 조회를 건너뜀), 더 최신 데이터만 반영됩니다. 휴대폰은 10분마다 데이터 지문만 비교해 바뀐 경우에만 내려받습니다(압축 전송 약 20KB). 화면 아래에 마지막 갱신 시각이 표시됩니다.
+
+PC 기록은 `%APPDATA%\hyosan-board\sync.log`, 제거는 `제거.bat`입니다.
 
 ## 앱 설치
 

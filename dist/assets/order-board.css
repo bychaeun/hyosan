@@ -1,0 +1,34 @@
+/* 수주현황판 — 원본 수주현황판.scx 색·크기 (폼 64,128,128 / 상단 띠 0,128,255 / 탭 맑은고딕 14pt) */
+/* 수주현황판 화면에서는 제목·검색·버튼 줄 없이 현황판부터 바로 보인다 */
+body.orders-mode main>.top{display:none}
+.ob-root{--ob-form:#408080;--ob-band:#0080ff;--ob-btn:#f0f0f0;--ob-btn-edge:#a0a0a0;--ob-off:#808080;--ob-on:#ff0000;--ob-frame:#004080;
+ margin:0 -2px;border-radius:12px;overflow:hidden;background:var(--ob-form);color:#000;font-family:'Noto Sans KR','Malgun Gothic',sans-serif}
+.ob-band{position:relative;z-index:2;display:flex;align-items:flex-start;gap:4px;height:46px;box-sizing:border-box;padding:4px 8px 0;background:var(--ob-band)}
+.ob-opt{flex:1 1 0;min-width:0;height:38px;box-sizing:border-box;padding:0 4px;cursor:pointer;background:var(--ob-btn);border:1px solid var(--ob-btn-edge);border-radius:2px;
+ box-shadow:inset 1px 1px 0 #fff,inset -1px -1px 0 #c8c8c8;color:var(--ob-off);font:700 18.67px/1 'Noto Sans KR','Malgun Gothic',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ob-opt[aria-selected="true"]{color:var(--ob-on);height:45px}
+.ob-opt:focus-visible{outline:2px solid #fff;outline-offset:-5px}
+.ob-scroll{overflow-x:auto}
+.ob-board{position:relative;min-height:120px}
+.ob-ctn{position:absolute;height:65px}
+.ob-ctn>div{position:absolute;box-sizing:border-box;white-space:pre}
+.ob-lbl{font-size:12px;font-weight:700;line-height:14px}
+.ob-fix{overflow:hidden}
+.ob-shp{border:1px solid var(--ob-frame);border-radius:1px}
+.ob-foot{padding:6px 12px 10px;font-size:11px;line-height:1.5;color:#d6ecec}
+.ob-foot.ob-stale{color:#ffe08a}
+.ob-foot.ob-err{color:#ffc4c4}
+/* 탭 이름이 잘리지 않도록: 화면이 아니라 현황판 영역 너비 기준으로 글자 크기·줄바꿈 */
+.ob-root{container-type:inline-size}
+@container (max-width:1500px){.ob-opt{font-size:14px}}
+@container (max-width:1250px){.ob-opt{font-size:13px;padding:0 2px}}
+@container (max-width:1060px){
+ .ob-band{height:auto;flex-wrap:wrap;padding-bottom:4px}
+ .ob-opt{flex:1 1 calc(20% - 4px);height:32px}
+ .ob-opt[aria-selected="true"]{height:32px}
+}
+@container (max-width:640px){
+ .ob-opt{flex:1 1 calc(33.333% - 4px);height:30px;font-size:12.5px}
+ .ob-opt[aria-selected="true"]{height:30px}
+}
+@media(max-width:700px){.ob-root{margin:0 -6px;border-radius:10px}}

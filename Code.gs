@@ -21,11 +21,14 @@ function doPost(e){
       if(loginResponse.ok)loginResponse.sessionToken=createSessionToken_(loginUser.Email);
       return jsonOutput(loginResponse);
     }
+    if(body.action==='orderBoardPush')return jsonOutput(orderBoardPush_(body));     // 사무실 PC 자동 전송 (OrderBoard.gs)
+    if(body.action==='orderBoardStatus')return jsonOutput(orderBoardStatus_(body));
     const user=authenticateRequest_(body,cfg);
     if(body.action==='sessionStatus')return jsonOutput(renewSessionResponse_(body,user,userResponse_(user)));
     if(user.Status!=='ADMIN'&&user.Status!=='APPROVED')return jsonOutput(userResponse_(user));
     if(body.action==='imageVersions')return jsonOutput({ok:true,imageVersions:imageVersionBatch_(body.ids,body.force===true)});
     if(body.action==='data')return jsonOutput(renewSessionResponse_(body,user,Object.assign(getAllData_(body.force===true),{user:userResponse_(user).user})));
+    if(body.action==='orderBoard')return orderBoardResponse_(body,user);
     if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmIds||body.lpmId,user.Email,cfg));
     if(body.action==='listUsers')return jsonOutput(listUsers_(user));
     if(body.action==='setUserStatus')return jsonOutput(setUserStatus_(user,body.email,body.status));
