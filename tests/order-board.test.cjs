@@ -47,11 +47,25 @@ test('regions are separated and recent orders turn cyan',()=>{
  assert.equal(board.vfpColor(255),'#ff0000');assert.equal(board.vfpColor(16744576),'#8080ff');
 });
 
+test('long-idle orders without production are hidden like the ERP procedure',()=>{
+ const base={locate_code:'99',tocomp_code:'T9',tocomp_short:'효산LPL',comp_code:'T9',item:'X',pattern:'X',spec_code:'100',spec:'일반',standard:'4*8',ord_qnty:10,out_qnty:0,express:0,cancel_time:null};
+ const orders=[
+  {...base,sj_code:'OLD',state:'오더접수',ord_date:'2019-03-15T15:00:00+09:00'},
+  {...base,sj_code:'OLD_PD',state:'오더접수',ord_date:'2026-02-23T15:00:00+09:00'},
+  {...base,sj_code:'OLD_WK',state:'생산지시',ord_date:'2026-02-22T15:00:00+09:00'},
+  {...base,sj_code:'NEW',state:'오더접수',ord_date:'2026-10-13T15:00:00+09:00'},
+  {...base,sj_code:'BUSY',state:'생산중',ord_date:'2025-01-01T15:00:00+09:00'}
+ ];
+ const items=load().computeRegion({...data,orders,outwait:[{sj_code:'OLD_PD',mode:1,out_code:null,up_code:null,wk_code:null,qnty:100}],worksheet:[],todaylist:[]},'99',NOW);
+ assert.deepEqual(items.filter(x=>x.type==='order').map(x=>x.sj),['OLD_PD','NEW','BUSY']);
+ assert.equal(items.find(x=>x.type==='sum').remain,30);
+});
+
 test('order board menu and backend routes are wired',()=>{
  const html=fs.readFileSync(path.join(root,'index.html'),'utf8'),code=fs.readFileSync(path.join(root,'Code.gs'),'utf8');
  assert.match(html,/<button data-page="orders" data-mobile-label="수주">수주현황판<\/button>/);
  assert.match(html,/<section id="orders" class="page"><div id="orderBoard"><\/div><\/section>/);
- assert.match(html,/<script src="assets\/order-board\.js"><\/script>/);
+ assert.match(html,/<script src="assets\/order-board\.js(\?v=\d+)?"><\/script>/);
  assert.match(html,/else if\(id==='orders'\)renderOrders\(\)/);
  assert.match(html,/classList\.toggle\('orders-mode',id==='orders'\)/,'order board opens without the title/search row');
  assert.match(fs.readFileSync(path.join(root,'assets/order-board.css'),'utf8'),/body\.orders-mode main>\.top\{display:none\}/);

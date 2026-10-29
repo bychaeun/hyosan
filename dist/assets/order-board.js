@@ -10,10 +10,15 @@ var OrderBoard=(()=>{
  const ymd=p=>p.y+'-'+String(p.m).padStart(2,'0')+'-'+String(p.d).padStart(2,'0');
 
  /* ───── 계산 (um_loadstate / um_loadstate_comp / um_loadcomp / um_addwk / um_loadsum) ───── */
+ /* ERP 프로시저(sp_LoadOrderstate2)처럼 방치된 옛날 수주는 뺀다:
+    "오더접수·생산지시"에 멈춘 채 90일이 지났고 생산·출고 수량이 전혀 없는 건 (실제 ERP 화면과 대조해 맞춘 규칙) */
+ const STALE_DAYS=90,IDLE_STATES=['오더접수','생산지시'];
  function computeRegion(data,locate,now){
   now=now??Date.now();
-  const orders=(data.orders||[]).filter(o=>o.locate_code===locate);
   const ws=data.worksheet||[],ow=data.outwait||[],sd=new Set(data.sdrequest||[]);
+  const active=new Set(ow.filter(r=>num(r.qnty)!==0).map(r=>r.sj_code));
+  const isStale=o=>IDLE_STATES.includes(txt(o.state))&&o.ord_date&&Date.parse(o.ord_date)<now-STALE_DAYS*24*HOUR&&!active.has(o.sj_code);
+  const orders=(data.orders||[]).filter(o=>o.locate_code===locate&&!isStale(o));
   const wkRemark=data.wkRemark||{},specColor=data.specColor||{},stColor=data.stColor||{};
   const todayKey=ymd(kst(now-6*HOUR));
   const items=[];

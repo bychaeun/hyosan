@@ -51,8 +51,8 @@ try {
 
   # 원본 수주현황판.scx um_loadstate 의 조회 (프로시저 sp_LoadOrderstate2 대신 같은 내용의 view_orderstate 사용)
   $locates = @(Rows "SELECT locate_code AS code, locate AS name FROM dbo.tb_locate WITH (NOLOCK) WHERE deleted = 0 ORDER BY locate_code")
-  $orders = @(Rows ("SELECT locate_code, sj_code, tocomp_code, tocomp_short, comp_code, comp_short, item, pattern, spec_code, spec, st_code, standard, ord_qnty, out_qnty, cancel_time, express, order_time, remark1" +
-    " FROM dbo.view_orderstate WITH (NOLOCK) WHERE ord_qnty>0 and done_time is null and (cancel_time is null OR cancel_time > GETDATE()-1) and state<>'출고완료' ORDER BY tocomp_code, pattern, item"))
+  $orders = @(Rows ("SELECT locate_code, sj_code, tocomp_code, tocomp_short, comp_code, comp_short, item, pattern, spec_code, spec, st_code, standard, ord_qnty, out_qnty, cancel_time, express, order_time, ord_date, state, remark1" +
+    " FROM dbo.view_orderstate WITH (NOLOCK) WHERE ord_qnty>0 and done_time is null and (cancel_time is null OR cancel_time > GETDATE()-1) and state<>'출고완료' ORDER BY tocomp_code, end_date, pattern, item"))   # ERP 화면 순서: 거래처 → 납기일 → 패턴
   $sjSet = @{}; foreach ($o in $orders) { $sjSet[$o.sj_code] = $true }
   $tocompSet = @{}; foreach ($o in $orders) { $tocompSet[$o.tocomp_code] = $true }
 
@@ -67,7 +67,7 @@ try {
     " GROUP BY dbo.tb_order.sj_code, dbo.tb_outwait.seq, dbo.tb_outwait.out_code, dbo.tb_outwait.mode, dbo.tb_pdstock.wk_code" +
     " UNION ALL SELECT dbo.tb_order.sj_code, 0 as seq, NULL as out_code, 1 as mode, dbo.tb_product.wk_code, null as up_code, dbo.tb_product.pd_qnty" +
     " FROM dbo.tb_order INNER JOIN dbo.tb_product ON dbo.tb_product.sj_code = dbo.tb_order.sj_code and dbo.tb_product.kubun=0 and dbo.tb_product.deleted = 0" +
-    " WHERE dbo.tb_order.done_time is null and dbo.tb_order.cancel_time is null and dbo.tb_order.tocomp_code = '2-0820' and dbo.tb_order.deleted = 0" +
+    " WHERE dbo.tb_order.done_time is null and dbo.tb_order.cancel_time is null and dbo.tb_order.tocomp_code IN ('2-0820','000820') and dbo.tb_order.deleted = 0" +   # 재고 거래처 코드가 2-0820 → 000820 으로 바뀜 (실제 ERP 화면 기준)
     " ORDER BY 1,2,3,4,5,6,7") | Where-Object { $sjSet.ContainsKey($_.sj_code) -or ($_.wk_code -and $wkSet.ContainsKey($_.wk_code)) } |
     ForEach-Object { [ordered]@{ sj_code = $_.sj_code; mode = $_.mode; out_code = $_.out_code; up_code = $_.up_code; wk_code = $_.wk_code; qnty = $_.qnty } })
   $todaylist = @(Rows "SELECT id, tocomp_code, comp_code, CONVERT(char(10), today, 120) AS today, towhere FROM dbo.tb_todaylist ORDER BY id" | Where-Object { $tocompSet.ContainsKey($_.tocomp_code) })
