@@ -238,7 +238,7 @@ var OrderBoard=(()=>{
    foot.classList.remove('ob-err');
    if(!updatedAt){foot.textContent='';return}
    const t=new Date(updatedAt),mins=Math.round((Date.now()-t)/60000);
-   foot.textContent='마지막 갱신 '+t.toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'})+(mins>=1?' ('+mins+'분 전)':'')+' · ERP 수주현황판과 같은 내용 · 10분마다 갱신';
+   foot.textContent='마지막 갱신 '+t.toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'})+(mins>=1?' ('+mins+'분 전)':'')+' · 10분마다 갱신';
    foot.classList.toggle('ob-stale',mins>30);
   }
   if(typeof ResizeObserver!=='undefined')new ResizeObserver(()=>{if(!data)return;if(pending)draw();else if(board.clientWidth!==lastWidth&&board.clientWidth>0){lastWidth=board.clientWidth;arrange(board,placed)}}).observe(board);
