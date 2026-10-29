@@ -1,5 +1,5 @@
 /* 수주현황판 — 원본 ERP(수주현황판.scx, libs.vcx ctnsujustate)의 계산·배치·색을 그대로 옮긴 화면.
-   데이터는 사무실 PC 동기화(automation/order-sync)가 30분마다 올린 ERP 조회 결과(orderBoard). */
+   데이터는 사무실 PC 동기화(automation/order-sync)가 10분마다 올린 ERP 조회 결과(orderBoard). */
 var OrderBoard=(()=>{
  const OTOP=4,OLEFT=10,OHEIGHT=65,OGAP=5,WEEK='일월화수목금토',HOUR=3600e3;
  const txt=v=>String(v??'').trim();
@@ -14,43 +14,55 @@ var OrderBoard=(()=>{
     "오더접수·생산지시"에 멈춘 채 180일이 지났고 생산·출고 수량이 전혀 없는 건.
     실제 ERP 화면 대조: 101일 된 수주는 보이고(한솔홈데코 12844/12845) 249일 된 수주는 숨김(효산LPL G.T8분) */
  const STALE_DAYS=180,IDLE_STATES=['오더접수','생산지시'];
+ /* 수주번호·작업번호별로 한 번만 묶어 둔다 — 수주마다 전체 목록을 다시 훑지 않게(데이터가 바뀔 때만 다시 만듦) */
+ const indexCache=new WeakMap();
+ function indexOf(data){
+  let ix=indexCache.get(data);if(ix)return ix;
+  const by=(rows,key)=>{const m=new Map();for(const r of rows){const k=r[key];let a=m.get(k);if(!a)m.set(k,a=[]);a.push(r)}return m};
+  const ow=data.outwait||[],ws=data.worksheet||[];
+  ix={owBySj:by(ow,'sj_code'),owByWk:by(ow,'wk_code'),wsBySj:by(ws,'sj_code'),wsByWk:new Map(),iccBySj:by(data.icc||[],'sj_code'),
+   active:new Set(ow.filter(r=>num(r.qnty)!==0).map(r=>r.sj_code)),sd:new Set(data.sdrequest||[])};
+  for(const w of ws)if(!ix.wsByWk.has(w.wk_code))ix.wsByWk.set(w.wk_code,w);
+  indexCache.set(data,ix);return ix;
+ }
+ const NONE=[];
  function computeRegion(data,locate,now){
   now=now??Date.now();
-  const ws=data.worksheet||[],ow=data.outwait||[],sd=new Set(data.sdrequest||[]);
-  const active=new Set(ow.filter(r=>num(r.qnty)!==0).map(r=>r.sj_code));
+  const ix=indexOf(data),sd=ix.sd,active=ix.active;
   const isStale=o=>IDLE_STATES.includes(txt(o.state))&&o.ord_date&&Date.parse(o.ord_date)<now-STALE_DAYS*24*HOUR&&!active.has(o.sj_code);
   const orders=(data.orders||[]).filter(o=>o.locate_code===locate&&!isStale(o));
   const wkRemark=data.wkRemark||{},specColor=data.specColor||{},stColor=data.stColor||{};
   const todayKey=ymd(kst(now-6*HOUR));
   const items=[];
 
-  const nounpaid=sj=>{let qnty=0,wait=0;for(const r of ow)if(r.sj_code===sj){if(r.out_code!=null&&r.up_code==null)qnty+=num(r.qnty);if(r.out_code==null)wait+=num(r.qnty)}return{qnty,wait}};
+  const nounpaid=sj=>{let qnty=0,wait=0;for(const r of ix.owBySj.get(sj)||NONE){if(r.out_code!=null&&r.up_code==null)qnty+=num(r.qnty);if(r.out_code==null)wait+=num(r.qnty)}return{qnty,wait}};
   const chipRuns=(qs,bg)=>{const out=[];let last=0;for(const q of qs){if(q!==last){out.push({q,n:1,bg});last=q}else out[out.length-1].n++}return out};
 
   function addwk(sj,mode){
    const chips=[];let sum=0,req=0,mach=0;
    if(mode===3){
-    const qs=(data.icc||[]).filter(r=>r.sj_code===sj&&!r.up_code).map(r=>num(r.out_qnty));
+    const qs=(ix.iccBySj.get(sj)||NONE).filter(r=>!r.up_code).map(r=>num(r.out_qnty));
     chips.push(...chipRuns(qs,'#00f0f0'));qs.forEach(q=>sum+=q);
     return{chips,sum,req:0,mach:0};
    }
+   const own=ix.owBySj.get(sj)||NONE;
    /* 송장발행 · 미불증 미등록: 청록칸 */
-   const unpaid=ow.filter(r=>r.sj_code===sj&&r.mode===mode&&num(r.qnty)!==0&&r.out_code!=null&&r.up_code==null).map(r=>num(r.qnty)).sort((a,b)=>a-b);
+   const unpaid=own.filter(r=>r.mode===mode&&num(r.qnty)!==0&&r.out_code!=null&&r.up_code==null).map(r=>num(r.qnty)).sort((a,b)=>a-b);
    chips.push(...chipRuns(unpaid,'#00f0f0'));unpaid.forEach(q=>sum+=q);
    /* 출고대기: 노랑칸 (생산 지시가 아직 진행 중인 생산분은 제외) */
-   const wait=ow.filter(r=>{
-    if(r.sj_code!==sj||r.mode!==mode||num(r.qnty)===0||r.out_code!=null)return false;
-    if(mode===1&&r.mode===1){const w=ws.find(x=>x.wk_code===r.wk_code);if(w&&w.end_time==null&&num(w.pd_req)<100)return false}
+   const wait=own.filter(r=>{
+    if(r.mode!==mode||num(r.qnty)===0||r.out_code!=null)return false;
+    if(mode===1&&r.mode===1){const w=ix.wsByWk.get(r.wk_code);if(w&&w.end_time==null&&num(w.pd_req)<100)return false}
     return true;
    }).map(r=>num(r.qnty)).sort((a,b)=>a-b);
    chips.push(...chipRuns(wait,'#ffff00'));wait.forEach(q=>sum+=q);
    /* 지시수량: 파란 글씨 */
-   for(const w of ws){
-    if(w.sj_code!==sj||!(mode===2||num(w.mach_no)!==0))continue;
+   for(const w of ix.wsBySj.get(sj)||NONE){
+    if(!(mode===2||num(w.mach_no)!==0))continue;
     if(mode===2)req+=w.stock_done==null?num(w.stock_req):num(w.stock_wk);
     else if(w.end_time==null)req+=num(w.pd_req);
     if(!mach&&mode===1&&num(w.mach_no)!==0&&w.end_time==null&&w.cancel_time==null)mach=num(w.mach_no);
-    for(const r of ow)if(r.wk_code===w.wk_code&&r.mode===mode&&(mode===2||w.end_time!=null||num(w.pd_req)>=100))req-=num(r.qnty);
+    for(const r of ix.owByWk.get(w.wk_code)||NONE)if(r.mode===mode&&(mode===2||w.end_time!=null||num(w.pd_req)>=100))req-=num(r.qnty);
    }
    return{chips,sum,req,mach};
   }
@@ -91,7 +103,7 @@ var OrderBoard=(()=>{
 
   function group(t,comp,compName){
    const excl=compName==='제외';
-   const list=orders.filter(o=>o.tocomp_code===t.code&&(comp==null||(excl?!comp.includes(o.comp_code):o.comp_code===comp)));
+   const list=t.orders.filter(o=>(comp==null||(excl?!comp.includes(o.comp_code):o.comp_code===comp)));
    if(!list.length)return;
    const split=comp!=null&&!excl;
    items.push(companyCard(t,split?comp:null,split?compName:''));
@@ -107,8 +119,12 @@ var OrderBoard=(()=>{
    if(remain>0)items.push({type:'sum',remain,stock,pd});
   }
 
-  const tocomps=[],seen=new Set();
-  for(const o of orders)if(!seen.has(o.tocomp_code)){seen.add(o.tocomp_code);tocomps.push({code:o.tocomp_code,short:txt(o.tocomp_short),locatesub:txt((data.locatesub||{})[o.tocomp_code])})}
+  const tocomps=[],seen=new Map();
+  for(const o of orders){
+   let t=seen.get(o.tocomp_code);
+   if(!t){seen.set(o.tocomp_code,t={code:o.tocomp_code,short:txt(o.tocomp_short),locatesub:txt((data.locatesub||{})[o.tocomp_code]),orders:[]});tocomps.push(t)}
+   t.orders.push(o);
+  }
   tocomps.sort((a,b)=>a.short<b.short?-1:a.short>b.short?1:a.code<b.code?-1:a.code>b.code?1:0);
   for(const t of tocomps){
    const sc=(data.statecomp||[]).filter(r=>r.tocomp_code===t.code).sort((a,b)=>num(a.id)-num(b.id));
@@ -239,7 +255,9 @@ var OrderBoard=(()=>{
    board.replaceChildren(frag);arrange(board,placed);lastWidth=board.clientWidth;
    if(!placed.length)setStatus('이 지역은 현재 표시할 수주가 없습니다.');else setStatus();
   }
+  let showingMessage=false;
   function setStatus(message,isError){
+   showingMessage=!!message;
    if(message){foot.textContent=message;foot.classList.toggle('ob-err',!!isError);return}
    foot.classList.remove('ob-err');
    if(!updatedAt){foot.textContent='';return}
@@ -251,6 +269,8 @@ var OrderBoard=(()=>{
   /* 한글 글꼴은 글자 묶음별로 늦게 내려받아진다 — 새로 받아지면 폭을 다시 재서 맞춘다 */
   let fontTimer=0;const refit=()=>{clearTimeout(fontTimer);fontTimer=setTimeout(()=>{widthCache.clear();if(data&&!pending)draw()},80)};
   document.fonts?.ready?.then(refit);document.fonts?.addEventListener?.('loadingdone',refit);
+  /* "N분 전"이 멈춰 보이지 않게 1분마다 글자만 고친다(보이는 동안만) */
+  setInterval(()=>{if(updatedAt&&!showingMessage&&!document.hidden&&visible())setStatus()},60000);
   return{
    /* key가 같으면(서버 데이터 그대로) 다시 그리지 않고 갱신 시각만 바꾼다 */
    setData(next,at,key){
