@@ -132,9 +132,9 @@ html,body{overscroll-behavior-y:none}html{height:100%}body{min-height:100%}.pick
 <dialog id="composerPicker" aria-label="조합 재료 선택"><div class="composer-picker-body"><div class="modal-head"><div><h1 id="composerPickerTitle">선택</h1><div class="muted">검색 후 항목을 눌러 추가하세요.</div></div><button class="close" type="button" onclick="composerPicker.close()">×</button></div><input id="composerPickerSearch" class="composer-picker-search" placeholder="제품명 / 분류 검색"><div id="composerPickerGrid" class="composer-picker-grid"></div></div></dialog>
 <dialog id="userDialog" hidden aria-hidden="true"><div id="userDialogContent" class="user-admin"></div></dialog>
 <dialog id="installDialog" class="install-dialog" aria-label="앱 설치"><div class="install-dialog-body"><div class="modal-head"><h1>앱 설치</h1><button class="close" onclick="installDialog.close()" aria-label="닫기">×</button></div><div id="installHelp" class="value"></div><div class="actions"><button class="btn" onclick="installDialog.close()">확인</button></div></div></dialog>
-<script src="assets/image-share.js?v=124"></script>
+<script src="assets/image-share.js?v=125"></script>
 <script src="assets/image-recovery.js"></script>
-<script src="assets/order-board.js?v=124"></script>
+<script src="assets/order-board.js?v=125"></script>
 <script>
 const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbyiUawKvrT80mA7ClIg-WsBAKDg88sBwct8uasyn2R2o6ixLaM69eLEviyexyMTK_hv/exec',SYNC_MS:1800000,ORDER_SYNC_MS:600000,SYNC_TIMEOUT_MS:60000,AUTH_TIMEOUT_MS:45000,EXPORT_TIMEOUT_MS:120000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:8};
 const DATA_KEYS=['patterns','lpm','specialSpecs','emboss','sites'];
@@ -312,7 +312,7 @@ function stockHtml(key){
  if(!stockData)return '<span class="muted">'+(stockFailed?'재고를 불러오지 못했습니다.':stockCheckedAt?'재고 정보가 아직 없습니다.':'재고 확인 중…')+'</span>';
  const p=stockData.papers?.[key],l=stockData.lpm?.[key]||[],n=v=>Number(v||0).toLocaleString('ko-KR'),total=l.reduce((s,x)=>s+Number(x.q||0),0);
  const at=stockUpdatedAt?new Date(stockUpdatedAt).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
- return '<div class="stock-row"><span class="stock-label">종이 재고</span>'+(p?'<b>'+n(p.stock)+'</b> <span class="muted">(롤 '+n(p.rolls)+')</span>':'<span class="muted">없음</span>')+'</div>'
+ return '<div class="stock-row"><span class="stock-label">종이 재고</span>'+(p?'<b>'+n(p.stock)+' m</b> <span class="muted">(롤 '+n(p.rolls)+')</span>':'<span class="muted">없음</span>')+'</div>'
   +'<div class="stock-row"><span class="stock-label">LPM 재고</span>'+(total?'<b>'+n(total)+'매</b><span class="stock-detail">'+l.map(x=>esc(((x.s||'')+' '+(x.t||'')).trim())+' '+n(x.q)).join(' · ')+'</span>':'<span class="muted">없음</span>')+'</div>'
   +(at?'<div class="stock-time">ERP 기준 '+esc(at)+'</div>':'');
 }

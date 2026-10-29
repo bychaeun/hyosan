@@ -103,7 +103,7 @@ try {
   $paperSet = @{}; foreach ($p in $paperList) { $k = PaperKey $p; if ($k) { $paperSet[$k] = $true } }
   $stockPapers = [ordered]@{}; $stockLpm = [ordered]@{}
   if ($paperSet.Count) {
-    Rows "SELECT pattern, COUNT(*) AS rolls, SUM(stock) AS stock FROM dbo.view_patternstock WITH (NOLOCK) WHERE stock<>0 AND ISNULL(nouse,0)=0 GROUP BY pattern" | ForEach-Object {
+    Rows "SELECT pattern, COUNT(*) AS rolls, SUM(stock) AS stock FROM dbo.view_patternstock WITH (NOLOCK) WHERE stock<>0 AND ISNULL(nouse,0)=0 AND ISNULL(loose,0)=0 GROUP BY pattern" | ForEach-Object {
       $k = PaperKey $_.pattern; if ($paperSet.ContainsKey($k)) { $stockPapers[$k] = [ordered]@{ stock = $_.stock; rolls = $_.rolls } } }
     Rows "SELECT pattern, spec, standard, SUM(qnty) AS qnty FROM dbo.view_pdstock WITH (NOLOCK) WHERE out_code IS NULL AND qnty<>0 AND ISNULL(nouse,0)=0 GROUP BY pattern, spec, standard ORDER BY pattern, spec, standard" | ForEach-Object {
       $k = PaperKey $_.pattern
