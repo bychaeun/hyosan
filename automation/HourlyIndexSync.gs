@@ -1,6 +1,6 @@
 // Standalone HYOSAN INDEX SYNC project. Do not add this file to the web API project.
 const SPREADSHEET_ID='1RC-6ibPA86zaWOGt1rzgmQf9tLpT4OcgdI6K9XcUPTI';
-const LPM_SHEET='HYOSAN_LPM',INDEX_FOLDER='1q_c5qhZr8GpOqVf2MK11v9hwlmoHNFuU',IMAGE_FOLDER='1TgLqm-7qjsDqtSEXVFnPM3cC9shPxGSR';
+const LPM_SHEET='HYOSAN_LPM',INDEX_FOLDER='1q_c5qhZr8GpOqVf2MK11v9hwlmoHNFuU',IMAGE_FOLDER='17nAS6IOCC5tkl_L0NOYqdltnbRZmyZBb';
 const SYNC_VERSION='2026-10-26-manual-row-protection-v3';
 function syncIndexCode(){return runIndexSync_(false)}
 function previewIndexSync(){return runIndexSync_(true)}
