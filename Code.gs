@@ -27,15 +27,18 @@ function doPost(e){
     if(body.action==='sessionStatus')return jsonOutput(renewSessionResponse_(body,user,userResponse_(user)));
     if(user.Status!=='ADMIN'&&user.Status!=='APPROVED')return jsonOutput(userResponse_(user));
     if(body.action==='imageVersions')return jsonOutput({ok:true,imageVersions:imageVersionBatch_(body.ids,body.force===true)});
+    const level=userLevel_(user);
     if(body.action==='data'){
       // 휴대폰이 가진 데이터와 같으면 본문 없이 "그대로"만 알려 준다(30분 동기화·앱 재실행 때 수백 KB 절약)
-      if(body.force!==true&&body.since&&body.since===cachedDataHash_())return jsonOutput(renewSessionResponse_(body,user,{ok:true,notModified:true,dataHash:body.since,user:userResponse_(user).user}));
-      return jsonOutput(renewSessionResponse_(body,user,Object.assign(getAllData_(body.force===true),{user:userResponse_(user).user})));
+      const hash=levelHash_(cachedDataHash_(),level);
+      if(body.force!==true&&body.since&&body.since===hash)return jsonOutput(renewSessionResponse_(body,user,{ok:true,notModified:true,dataHash:body.since,user:userResponse_(user).user}));
+      return jsonOutput(renewSessionResponse_(body,user,Object.assign(dataForLevel_(getAllData_(body.force===true),level),{user:userResponse_(user).user})));
     }
-    if(body.action==='orderBoard')return orderBoardResponse_(body,user);
-    if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmIds||body.lpmId,user.Email,cfg));
+    if(body.action==='orderBoard'){if(level!=='FULL')throw appError_('상위 사용자만 볼 수 있습니다.','LEVEL_REQUIRED');return orderBoardResponse_(body,user)}
+    if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmIds||body.lpmId,user.Email,cfg,level));
     if(body.action==='listUsers')return jsonOutput(listUsers_(user));
     if(body.action==='setUserStatus')return jsonOutput(setUserStatus_(user,body.email,body.status));
+    if(body.action==='setUserLevel')return jsonOutput(setUserLevel_(user,body.email,body.level));
     return jsonOutput({ok:false,error:'Unknown action'});
   }catch(err){return jsonOutput({ok:false,error:String(err),code:err&&err.code?err.code:'REQUEST_FAILED'})}
 }
@@ -121,6 +124,7 @@ function touchUser_(identity,cfg){
     if(!row){
       const status=email===adminEmail?'ADMIN':'PENDING',newRow=[email,identity.name,identity.picture,status,now,now,status==='ADMIN'?email:'',status==='ADMIN'?now:''];
       sh.appendRow(newRow);row=Object.fromEntries(USER_HEADERS.map((h,i)=>[h,newRow[i]]));
+      if(status!=='ADMIN'){sh.getRange(sh.getLastRow(),levelColumn_(sh)).setValue('BASIC');row.Level='BASIC'}   // 새로 가입하는 사람은 하위로 시작
     }else{
       row.Name=identity.name||row.Name;row.PictureURL=identity.picture||row.PictureURL;row.LastLoginAt=now;
       if(email===adminEmail)row.Status='ADMIN';
@@ -139,12 +143,40 @@ function getUserSheet_(ss){
 
 function userResponse_(user){
   const status=user.Status||'PENDING';
-  return {ok:status==='ADMIN'||status==='APPROVED',code:status==='PENDING'?'APPROVAL_PENDING':status==='REVOKED'?'ACCESS_REVOKED':'',status:status,user:{email:user.Email,name:user.Name,picture:user.PictureURL,isAdmin:status==='ADMIN'},message:status==='PENDING'?'관리자 승인을 기다리고 있습니다.':status==='REVOKED'?'관리자가 사용 권한을 중지했습니다.':''};
+  return {ok:status==='ADMIN'||status==='APPROVED',code:status==='PENDING'?'APPROVAL_PENDING':status==='REVOKED'?'ACCESS_REVOKED':'',status:status,user:{email:user.Email,name:user.Name,picture:user.PictureURL,isAdmin:status==='ADMIN',level:userLevel_(user)},message:status==='PENDING'?'관리자 승인을 기다리고 있습니다.':status==='REVOKED'?'관리자가 사용 권한을 중지했습니다.':''};
+}
+
+// 사용자 단계 — 상위(FULL): 수주현황판·종이 넘버·원지 회사명·재고까지, 하위(BASIC): 그 밖의 라이브러리만.
+// APP_USERS의 Level 칸이 비어 있으면(기존 사용자) 상위, BASIC이면 하위. 관리자는 항상 상위.
+const BASIC_HIDDEN_FIELDS=['PaperNumber','PaperNo','BasePaperCompany'];
+function userLevel_(user){return user&&(user.Status==='ADMIN'||String(user.Level||'').trim().toUpperCase()!=='BASIC')?'FULL':'BASIC'}
+function levelHash_(hash,level){return hash?hash+(level==='BASIC'?'.b':''):''}
+// 하위 사용자에게는 종이 넘버·원지 회사명을 아예 보내지 않는다(화면에서 숨기는 것만으로는 개발자 도구로 보임)
+function dataForLevel_(data,level){
+  if(level!=='BASIC')return data;
+  const strip=rows=>(rows||[]).map(r=>{const o=Object.assign({},r);BASIC_HIDDEN_FIELDS.forEach(k=>delete o[k]);return o});
+  return Object.assign({},data,{lpm:strip(data.lpm),specialSpecs:strip(data.specialSpecs),dataHash:levelHash_(data.dataHash,level)});
+}
+function levelColumn_(sh){
+  const width=Math.max(sh.getLastColumn(),USER_HEADERS.length),headers=sh.getRange(1,1,1,width).getDisplayValues()[0].map(v=>String(v).trim()),found=headers.indexOf('Level');
+  if(found>=0)return found+1;
+  sh.getRange(1,width+1).setValue('Level');return width+1;
 }
 
 function listUsers_(admin){
   assertAdmin_(admin);const rows=readUsers_();
-  return {ok:true,users:rows.map(r=>({email:r.Email,name:r.Name,picture:r.PictureURL,status:r.Status,requestedAt:r.RequestedAt,lastLoginAt:r.LastLoginAt,approvedBy:r.ApprovedBy,approvedAt:r.ApprovedAt}))};
+  return {ok:true,users:rows.map(r=>({email:r.Email,name:r.Name,picture:r.PictureURL,status:r.Status,level:userLevel_(r),requestedAt:r.RequestedAt,lastLoginAt:r.LastLoginAt,approvedBy:r.ApprovedBy,approvedAt:r.ApprovedAt}))};
+}
+
+function setUserLevel_(admin,email,level){
+  assertAdmin_(admin);email=String(email||'').trim().toLowerCase();level=String(level||'').toUpperCase();
+  if(!email||!['FULL','BASIC'].includes(level))throw appError_('사용자 또는 단계 값이 올바르지 않습니다.','INVALID_USER_UPDATE');
+  const ss=SpreadsheetApp.openById(SPREADSHEET_ID),sh=getUserSheet_(ss),values=sh.getDataRange().getDisplayValues();
+  for(let i=1;i<values.length;i++)if(String(values[i][0]||'').toLowerCase()===email){
+    if(String(values[i][3]||'').toUpperCase()==='ADMIN')throw appError_('관리자는 항상 상위입니다.','ADMIN_PROTECTED');
+    sh.getRange(i+1,levelColumn_(sh)).setValue(level);clearUserCache_();return {ok:true,email:email,level:level};
+  }
+  throw appError_('사용자를 찾을 수 없습니다.','USER_NOT_FOUND');
 }
 
 function setUserStatus_(admin,email,status){
@@ -319,9 +351,9 @@ function exportImageUrls_(item){
   return values.flatMap(v=>String(v||'').split(/[\r\n,;|]+/)).map(v=>v.trim()).filter(v=>/^https?:\/\//i.test(v)&&!seen[v]&&(seen[v]=true));
 }
 
-function exportToSlides_(lpmIds,requesterEmail,cfg){
+function exportToSlides_(lpmIds,requesterEmail,cfg,level){
   cfg=cfg||getConfig_();
-  const items=getLpmsForExport_(lpmIds),title=items.length===1?'HYOSAN LPM Export - '+lpmDisplayName_(items[0]):'HYOSAN LPM Export - '+items.length+' products',destinationId=String(cfg.SLIDES_DESTINATION_ID||'').trim();
+  const items=dataForLevel_({lpm:getLpmsForExport_(lpmIds)},level).lpm,title=items.length===1?'HYOSAN LPM Export - '+lpmDisplayName_(items[0]):'HYOSAN LPM Export - '+items.length+' products',destinationId=String(cfg.SLIDES_DESTINATION_ID||'').trim();
   let pres,created=false,destinationWarning='';
   if(destinationId){
     try{pres=SlidesApp.openById(destinationId)}
@@ -341,7 +373,7 @@ function appendLpmSlide_(pres,item,W,H){
   try{imageInserted=insertSquareImage_(slide,exportImageUrls_(item),0,(H-imageSize)/2,imageSize)}catch(err){console.warn('Slides image failed for '+item.LPM_ID+': '+err.message)}
   const x=W*.62,w=W*.32;
   addText_(slide,lpmDisplayName_(item),x,H*.12,w,40,15,true);
-  addText_(slide,'종이 넘버',x,H*.23,w,18,11,true);addText_(slide,item.PaperNumber||item.PaperNo||item.PatternForm||'-',x,H*.28,w,24,8,false);
+  if(item.PaperNumber||item.PaperNo||item.PatternForm){addText_(slide,'종이 넘버',x,H*.23,w,18,11,true);addText_(slide,item.PaperNumber||item.PaperNo||item.PatternForm,x,H*.28,w,24,8,false)}   // 하위 사용자는 종이 넘버 없이
   addText_(slide,'샘플북',x,H*.39,w,18,11,true);addText_(slide,item.SampleBook||'-',x,H*.44,w,24,8,false);
   addText_(slide,'분류',x,H*.55,w,18,11,true);addText_(slide,item.Category||'-',x,H*.60,w,24,8,false);
   addText_(slide,'용도',x,H*.71,w,18,11,true);addText_(slide,item.Applications||'-',x,H*.76,w,44,8,false);

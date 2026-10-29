@@ -31,7 +31,7 @@ test('repeat Google login within 6 hours skips the sheet lock and write',()=>{
 test('phone keeps its catalog when the server says nothing changed',async()=>{
  let rebuilt=0,sent=null,status='';
  const c=vm.createContext({console,Date,JSON,CONFIG:{API_URL:'x'},DATA_KEYS:['lpm'],auth:{sessionToken:'s',user:null},
-  apiPost:async(a,extra)=>{sent=extra;return {ok:true,notModified:true,user:{email:'staff'}}},setStatus:(t,k)=>{status=k},startImageRefresh(){},
+  apiPost:async(a,extra)=>{sent=extra;return {ok:true,notModified:true,user:{email:'staff'}}},setStatus:(t,k)=>{status=k},startImageRefresh(){},applyUserLevel(){},
   rebuildIndexes:()=>rebuilt++,renderActive(){},saveCachedData(){},isTransientError:()=>false,clearSession(){}});
  vm.runInContext('let syncPromise=null,appStarted=true,lastPayloadText="",lastAccessVerifiedAt=0,db={lpm:[1],dataHash:"h1"};'+fn('syncData'),c);
  await c.syncData();
