@@ -55,16 +55,18 @@ function authenticateRequest_(body,cfg){
 }
 
 function createSessionToken_(email){
-  const payload=Utilities.base64EncodeWebSafe(JSON.stringify({email:String(email).toLowerCase(),exp:Date.now()+30*24*60*60*1000})).replace(/=+$/,''),signature=Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(payload,getSessionSecret_())).replace(/=+$/,'');
+  const payload=Utilities.base64EncodeWebSafe(JSON.stringify({email:String(email).toLowerCase(),exp:Date.now()+SESSION_DAYS*24*60*60*1000})).replace(/=+$/,''),signature=Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(payload,getSessionSecret_())).replace(/=+$/,'');
   return payload+'.'+signature;
 }
 
-// Keep the same 30-day signed session window; renew only after approval is checked.
+// 한 번 로그인하면 계속 쓰도록: 로그인은 1년 유효, 쓰는 동안 한 달마다 다시 1년으로 늘린다.
+// 승인 상태는 요청마다 시트 기준으로 확인하므로, 관리자가 사용 중지하면 토큰이 남아 있어도 바로 막힌다.
+const SESSION_DAYS=365,SESSION_RENEW_AFTER_DAYS=30;
 function renewSessionResponse_(body,user,response){
   if(!user||!['ADMIN','APPROVED'].includes(user.Status)||!body.sessionToken)return response;
   try{
     const payload=JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(String(body.sessionToken).split('.')[0])).getDataAsString());
-    if(Number(payload.exp)-Date.now()<7*24*60*60*1000)response.sessionToken=createSessionToken_(user.Email);
+    if(Number(payload.exp)-Date.now()<(SESSION_DAYS-SESSION_RENEW_AFTER_DAYS)*24*60*60*1000)response.sessionToken=createSessionToken_(user.Email);
   }catch(e){}
   return response;
 }

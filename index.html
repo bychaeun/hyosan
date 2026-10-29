@@ -132,9 +132,9 @@ html,body{overscroll-behavior-y:none}html{height:100%}body{min-height:100%}.pick
 <dialog id="composerPicker" aria-label="조합 재료 선택"><div class="composer-picker-body"><div class="modal-head"><div><h1 id="composerPickerTitle">선택</h1><div class="muted">검색 후 항목을 눌러 추가하세요.</div></div><button class="close" type="button" onclick="composerPicker.close()">×</button></div><input id="composerPickerSearch" class="composer-picker-search" placeholder="제품명 / 분류 검색"><div id="composerPickerGrid" class="composer-picker-grid"></div></div></dialog>
 <dialog id="userDialog" hidden aria-hidden="true"><div id="userDialogContent" class="user-admin"></div></dialog>
 <dialog id="installDialog" class="install-dialog" aria-label="앱 설치"><div class="install-dialog-body"><div class="modal-head"><h1>앱 설치</h1><button class="close" onclick="installDialog.close()" aria-label="닫기">×</button></div><div id="installHelp" class="value"></div><div class="actions"><button class="btn" onclick="installDialog.close()">확인</button></div></div></dialog>
-<script src="assets/image-share.js?v=121"></script>
+<script src="assets/image-share.js?v=122"></script>
 <script src="assets/image-recovery.js"></script>
-<script src="assets/order-board.js?v=121"></script>
+<script src="assets/order-board.js?v=122"></script>
 <script>
 const CONFIG={API_URL:'https://script.google.com/macros/s/AKfycbyiUawKvrT80mA7ClIg-WsBAKDg88sBwct8uasyn2R2o6ixLaM69eLEviyexyMTK_hv/exec',SYNC_MS:1800000,ORDER_SYNC_MS:600000,SYNC_TIMEOUT_MS:60000,AUTH_TIMEOUT_MS:45000,EXPORT_TIMEOUT_MS:120000,ITEMS_PER_PAGE:30,COLOR_TOLERANCE_PERCENT:8};
 const DATA_KEYS=['patterns','lpm','specialSpecs','emboss','sites'];
@@ -566,7 +566,8 @@ async function handleGoogleCredential(response){
 }
 function showGoogleGate(){
  const form=$('#accessForm');form.className='access-panel google-gate';form.innerHTML='<img class="access-logo" src="assets/hyosan-lpl-logo-full.svg" alt="HYOSAN LPL"><h1 id="accessTitle">HYOSAN LPM Library</h1><p class="login-help">회사에서 사용할 Google 계정으로 로그인해 주세요.<br>최초 로그인 후 관리자의 승인이 필요합니다.</p><div id="googleButton" class="google-button"></div><p id="loginStatus" class="login-status" role="status"></p>';
- const init=()=>{if(!(window.google&&google.accounts&&google.accounts.id)){setTimeout(init,150);return}google.accounts.id.initialize({client_id:auth.clientId,callback:handleGoogleCredential,auto_select:false});google.accounts.id.renderButton($('#googleButton'),{theme:'outline',size:'large',shape:'pill',text:'signin_with',locale:'ko',width:280});fetch(CONFIG.API_URL+'?action=health&ts='+Date.now(),{cache:'no-store'}).catch(()=>{})};init();
+ const init=()=>{if(!(window.google&&google.accounts&&google.accounts.id)){setTimeout(init,150);return}/* 저장된 로그인이 휴대폰에서 지워졌어도 전에 쓴 Google 계정이면 버튼 없이 바로 다시 로그인(로그아웃하면 자동 로그인 꺼짐) */
+google.accounts.id.initialize({client_id:auth.clientId,callback:handleGoogleCredential,auto_select:true,use_fedcm_for_prompt:true,itp_support:true,cancel_on_tap_outside:false});google.accounts.id.renderButton($('#googleButton'),{theme:'outline',size:'large',shape:'pill',text:'signin_with',locale:'ko',width:280});google.accounts.id.prompt();fetch(CONFIG.API_URL+'?action=health&ts='+Date.now(),{cache:'no-store'}).catch(()=>{})};init();
 }
 function clearSession(){auth.idToken='';try{sessionStorage.removeItem(RESUME_KEY)}catch(e){}if(typeof appStarted!=='undefined'&&appStarted){$('#accessGate').hidden=false;document.body.classList.add('access-locked')}return rememberSession('')}
 function retryAccessGate(message){

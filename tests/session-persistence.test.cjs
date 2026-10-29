@@ -19,8 +19,12 @@ test('revoked approval erases local and backup tokens and never displays cached 
  const {c,backing}=context();await c.rememberSession('saved');c.CONFIG={AUTH_TIMEOUT_MS:100};c.DATA_KEYS=['lpm'];c.loginStatus=()=>{};c.apiPost=async()=>{const e=new Error('Revoked');e.code='ACCESS_REVOKED';throw e};c.fetchAppConfig=async()=>({authRequired:true,clientId:'client'});c.showGoogleGate=()=>{};c.startApp=()=>assert.fail('Revoked user must not enter');vm.runInContext('let accessPromise=null;'+fn('bootstrapAccess'),c);await c.bootstrapAccess();assert.equal(c.auth.sessionToken,'');assert.equal(backing.has('session'),false);
 });
 test('server renews near-expiry approved sessions only, preserving the existing window',()=>{
- const code=fs.readFileSync(path.join(__dirname,'../Code.gs'),'utf8'),start=code.indexOf('function renewSessionResponse_'),end=code.indexOf('\nfunction ',start+1),c=vm.createContext({Date,JSON,Utilities:{base64DecodeWebSafe:s=>s,newBlob:s=>({getDataAsString:()=>s})},createSessionToken_:email=>'renewed:'+email});vm.runInContext(code.slice(start,end),c);
- const body={sessionToken:JSON.stringify({exp:Date.now()+1000})+'.signature'};assert.equal(c.renewSessionResponse_(body,{Status:'APPROVED',Email:'staff'},{}).sessionToken,'renewed:staff');assert.equal(c.renewSessionResponse_(body,{Status:'REVOKED',Email:'staff'},{}).sessionToken,undefined);assert.equal(c.renewSessionResponse_({sessionToken:JSON.stringify({exp:Date.now()+20*86400000})+'.signature'},{Status:'APPROVED',Email:'staff'},{}).sessionToken,undefined);
+ const code=fs.readFileSync(path.join(__dirname,'../Code.gs'),'utf8'),start=code.indexOf('function renewSessionResponse_'),end=code.indexOf('\nfunction ',start+1),c=vm.createContext({Date,JSON,SESSION_DAYS:365,SESSION_RENEW_AFTER_DAYS:30,Utilities:{base64DecodeWebSafe:s=>s,newBlob:s=>({getDataAsString:()=>s})},createSessionToken_:email=>'renewed:'+email});vm.runInContext(code.slice(start,end),c);
+ assert.match(code,/SESSION_DAYS=365,SESSION_RENEW_AFTER_DAYS=30/,'one login lasts a year and is extended while used');
+ const body={sessionToken:JSON.stringify({exp:Date.now()+1000})+'.signature'};assert.equal(c.renewSessionResponse_(body,{Status:'APPROVED',Email:'staff'},{}).sessionToken,'renewed:staff');assert.equal(c.renewSessionResponse_(body,{Status:'REVOKED',Email:'staff'},{}).sessionToken,undefined);
+ /* 받은 지 한 달 넘은 로그인은 다시 1년으로 연장, 한 달 안 된 것은 그대로 */
+ assert.equal(c.renewSessionResponse_({sessionToken:JSON.stringify({exp:Date.now()+300*86400000})+'.signature'},{Status:'APPROVED',Email:'staff'},{}).sessionToken,'renewed:staff');
+ assert.equal(c.renewSessionResponse_({sessionToken:JSON.stringify({exp:Date.now()+350*86400000})+'.signature'},{Status:'APPROVED',Email:'staff'},{}).sessionToken,undefined);
 });
 
 test('same-tab resume rejects expired, stale, mismatched and malformed sessions',()=>{
