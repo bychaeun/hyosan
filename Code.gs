@@ -27,7 +27,11 @@ function doPost(e){
     if(body.action==='sessionStatus')return jsonOutput(renewSessionResponse_(body,user,userResponse_(user)));
     if(user.Status!=='ADMIN'&&user.Status!=='APPROVED')return jsonOutput(userResponse_(user));
     if(body.action==='imageVersions')return jsonOutput({ok:true,imageVersions:imageVersionBatch_(body.ids,body.force===true)});
-    if(body.action==='data')return jsonOutput(renewSessionResponse_(body,user,Object.assign(getAllData_(body.force===true),{user:userResponse_(user).user})));
+    if(body.action==='data'){
+      // 휴대폰이 가진 데이터와 같으면 본문 없이 "그대로"만 알려 준다(30분 동기화·앱 재실행 때 수백 KB 절약)
+      if(body.force!==true&&body.since&&body.since===cachedDataHash_())return jsonOutput(renewSessionResponse_(body,user,{ok:true,notModified:true,dataHash:body.since,user:userResponse_(user).user}));
+      return jsonOutput(renewSessionResponse_(body,user,Object.assign(getAllData_(body.force===true),{user:userResponse_(user).user})));
+    }
     if(body.action==='orderBoard')return orderBoardResponse_(body,user);
     if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmIds||body.lpmId,user.Email,cfg));
     if(body.action==='listUsers')return jsonOutput(listUsers_(user));
@@ -78,7 +82,8 @@ function readUsers_(){
   const cache=CacheService.getScriptCache(),cached=cache.get(USER_CACHE_KEY);
   if(cached){try{return JSON.parse(cached)}catch(e){}}
   const rows=readSheet_(SpreadsheetApp.openById(SPREADSHEET_ID),SHEET_NAMES.users);
-  try{cache.put(USER_CACHE_KEY,JSON.stringify(rows),30)}catch(e){}
+  // 승인·중지·로그인 기록을 앱에서 바꾸면 clearUserCache_로 즉시 지워진다. 시트를 직접 고친 경우만 최대 5분 뒤 반영.
+  try{cache.put(USER_CACHE_KEY,JSON.stringify(rows),300)}catch(e){}
   return rows;
 }
 function clearUserCache_(){try{CacheService.getScriptCache().remove(USER_CACHE_KEY)}catch(e){}}
@@ -102,6 +107,9 @@ function verifyGoogleToken_(idToken,cfg){
 }
 
 function touchUser_(identity,cfg){
+  // 같은 사람이 6시간 안에 다시 로그인하면(이름·사진도 그대로) 시트를 잠그고 다시 쓰지 않는다
+  const email0=identity.email.toLowerCase(),known=readUsers_().find(r=>String(r.Email||'').toLowerCase()===email0);
+  if(known&&(email0!==String(cfg.ADMIN_EMAIL||'').toLowerCase()||known.Status==='ADMIN')&&(!identity.name||identity.name===known.Name)&&(!identity.picture||identity.picture===known.PictureURL)&&Date.now()-Date.parse(known.LastLoginAt||'')<6*3600e3)return known;
   const lock=LockService.getScriptLock();lock.waitLock(10000);
   try{
     const ss=SpreadsheetApp.openById(SPREADSHEET_ID),sh=getUserSheet_(ss),values=sh.getDataRange().getDisplayValues(),headers=values[0],email=identity.email.toLowerCase(),now=new Date().toISOString();
@@ -149,7 +157,8 @@ function setUserStatus_(admin,email,status){
 function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관리자 권한이 필요합니다.','ADMIN_REQUIRED')}
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
-const DATA_CACHE_PREFIX='library-data-v16-';
+const DATA_CACHE_PREFIX='library-data-v17-';
+function cachedDataHash_(){try{return (JSON.parse(CacheService.getScriptCache().get(DATA_CACHE_PREFIX+'meta')||'null')||{}).hash||''}catch(e){return ''}}
 function readDataCache_(cache){
   try{
     const meta=JSON.parse(cache.get(DATA_CACHE_PREFIX+'meta')||'null');if(!meta||!meta.count)return null;
@@ -160,9 +169,11 @@ function readDataCache_(cache){
 }
 function writeDataCache_(cache,data){
   try{
+    delete data.dataHash;
+    data.dataHash=Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5,JSON.stringify(data),Utilities.Charset.UTF_8));
     const zipped=Utilities.gzip(Utilities.newBlob(JSON.stringify(data),'application/json')),encoded=Utilities.base64Encode(zipped.getBytes()),size=80000,values={};
     for(let i=0,n=0;i<encoded.length;i+=size,n++)values[DATA_CACHE_PREFIX+n]=encoded.slice(i,i+size);
-    values[DATA_CACHE_PREFIX+'meta']=JSON.stringify({count:Math.ceil(encoded.length/size)});
+    values[DATA_CACHE_PREFIX+'meta']=JSON.stringify({count:Math.ceil(encoded.length/size),hash:data.dataHash});
     cache.putAll(values,3600);
   }catch(e){console.warn('Data cache skipped: '+e.message)}
 }

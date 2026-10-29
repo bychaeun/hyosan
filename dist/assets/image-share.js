@@ -36,11 +36,17 @@ async function shareImageFile(file){
 }
 function shareImageBlob(blob,name,key){
  // Neutral filename prevents recipient apps from reusing product numbers as captions.
- const file=new File([blob],'HYOSAN-image.png',{type:blob.type||'image/png'});
+ const file=new File([blob],blob.type==='image/jpeg'?'HYOSAN-image.jpg':'HYOSAN-image.png',{type:blob.type||'image/png'});
  preparedImageShare={key,file};
  clearTimeout(preparedImageShareTimer);
  preparedImageShareTimer=setTimeout(()=>{preparedImageShare=null},120000);
  return shareImageFile(file);
+}
+async function fetchShareImage(url,maxSize){
+ const driveId=driveFileId(url),source=driveId?'https://lh3.googleusercontent.com/d/'+encodeURIComponent(driveId)+'=w'+maxSize:url;
+ const response=await fetch(source,{mode:'cors',credentials:'omit',signal:AbortSignal.timeout(30000)});
+ if(!response.ok)throw new Error('이미지를 불러올 수 없습니다 ('+response.status+').');
+ return response.blob();
 }
 async function shareCurrentImage(button){
  if(button.disabled||button.dataset.sharing==='true')return;
@@ -50,12 +56,17 @@ async function shareCurrentImage(button){
   const key=JSON.stringify(['modal',item]),cached=cachedImageShare(key);
   if(cached){actionStatus(await shareImageFile(cached));return}
   actionStatus('공유할 이미지를 준비하고 있습니다…');
-  const image=await loadComposerExportImage(item.url,2000);canvas=document.createElement('canvas');
-  const scale=Math.min(1,2000/Math.max(image.naturalWidth,image.naturalHeight));
-  canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
-  canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
-  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw Error('이미지 생성 실패');
-  actionStatus(await shareImageBlob(blob,'HYOSAN-image.png',key));
+  /* 받은 사진(JPEG·PNG)을 다시 그리지 않고 그대로 보낸다 — 휴대폰에서 PNG 재인코딩(약 1초)을 없애
+     "다시 눌러 주세요" 없이 첫 번에 공유창이 뜨게 함. 다른 형식일 때만 캔버스로 JPEG 변환 */
+  let blob=await fetchShareImage(item.url,2000);
+  if(!/^image\/(jpeg|png)$/.test(blob.type)){
+   const image=await loadComposerExportImage(item.url,2000);canvas=document.createElement('canvas');
+   const scale=Math.min(1,2000/Math.max(image.naturalWidth,image.naturalHeight));
+   canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+   const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0,canvas.width,canvas.height);
+   blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.92));if(!blob)throw Error('이미지 생성 실패');
+  }
+  actionStatus(await shareImageBlob(blob,'HYOSAN-image.jpg',key));
  }catch(error){actionStatus('이미지 공유 준비 실패: '+error.message)}
  finally{if(canvas)canvas.width=canvas.height=0;delete button.dataset.sharing;button.removeAttribute('aria-busy')}
 }
