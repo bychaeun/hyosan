@@ -35,6 +35,7 @@ function doPost(e){
       return jsonOutput(renewSessionResponse_(body,user,Object.assign(dataForLevel_(getAllData_(body.force===true),level),{user:userResponse_(user).user})));
     }
     if(body.action==='orderBoard'){if(level!=='FULL')throw appError_('상위 사용자만 볼 수 있습니다.','LEVEL_REQUIRED');return orderBoardResponse_(body,user)}
+    if(body.action==='stock'){if(level!=='FULL')throw appError_('상위 사용자만 볼 수 있습니다.','LEVEL_REQUIRED');return stockResponse_(body,user)}
     if(body.action==='exportToSlides')return jsonOutput(exportToSlides_(body.lpmIds||body.lpmId,user.Email,cfg,level));
     if(body.action==='listUsers')return jsonOutput(listUsers_(user));
     if(body.action==='setUserStatus')return jsonOutput(setUserStatus_(user,body.email,body.status));

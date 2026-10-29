@@ -1,6 +1,6 @@
 ﻿# 수주현황판 자동 전송 — 업체 ERP DB(읽기 전용)에서 원본 수주현황판 조회를 그대로 실행해 효산 웹앱으로 보낸다.
 # 작업 스케줄러가 10분마다 실행. 계정·전송 키는 %APPDATA%\hyosan-board 에 이 PC·이 윈도우 계정 전용으로 암호화 저장.
-param([switch]$DryRun, [string]$OutFile)
+param([switch]$DryRun, [string]$OutFile, [string[]]$Papers)   # -Papers: 시험 실행 때 재고 조회할 종이 넘버를 직접 지정
 $ErrorActionPreference = 'Stop'
 $home_ = Join-Path $env:APPDATA 'hyosan-board'
 $log = Join-Path $home_ 'sync.log'
@@ -11,16 +11,21 @@ function Unprotect($s) { (New-Object System.Net.NetworkCredential('', ($s | Conv
 try {
   if ((Test-Path $log) -and (Get-Item $log).Length -gt 512KB) { Move-Item $log "$log.old" -Force }
   [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-  function Api($payload) { Invoke-RestMethod -Uri $apiUrl -Method Post -ContentType 'text/plain; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes(($payload | ConvertTo-Json -Depth 6 -Compress))) -TimeoutSec 120 }
-  if (-not $DryRun) {
+  function Api($payload) { Invoke-RestMethod -Uri $apiUrl -Method Post -ContentType 'text/plain; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes(($payload | ConvertTo-Json -Depth 8 -Compress))) -TimeoutSec 120 }
+  # 재고는 웹앱 시트(HYOSAN_LPM)에 있는 종이 넘버만 조회한다 — 목록은 상태 확인 때 함께 받는다
+  $paperList = @()
+  $pushFile = Join-Path $home_ 'push.json'
+  if (-not $DryRun -or (Test-Path $pushFile)) {
     # 다른 PC가 8분 안에 이미 보냈으면 DB 조회 없이 끝낸다 (여러 PC 설치 시 중복 방지)
-    $pushKey = Unprotect ((Get-Content (Join-Path $home_ 'push.json') -Raw | ConvertFrom-Json).key)
-    $status = Api ([ordered]@{ action = 'orderBoardStatus'; secret = $pushKey })
+    $pushKey = Unprotect ((Get-Content $pushFile -Raw | ConvertFrom-Json).key)
+    $status = Api ([ordered]@{ action = 'orderBoardStatus'; secret = $pushKey; papers = $true })
     if ($status.ok -ne $true) { throw "웹앱 응답 오류: $($status.error)" }
-    if ($status.updatedAt) {
+    if ($status.papers) { $paperList = @($status.papers) }
+  }
+  if ($DryRun -and $Papers) { $paperList = @($Papers | ForEach-Object { $_ -split ',' }) }
+  if (-not $DryRun -and $status.updatedAt) {
       $age = ((Get-Date) - [datetime]::ParseExact($status.updatedAt.Substring(0, 19), 'yyyy-MM-ddTHH:mm:ss', $null)).TotalMinutes
       if ($age -ge 0 -and $age -lt 8) { Log ("건너뜀: 다른 PC가 {0:N0}분 전에 보냄" -f $age); exit 0 }
-    }
   }
   $cred = Get-Content (Join-Path $home_ 'cred.json') -Raw | ConvertFrom-Json
   $csb = New-Object System.Data.SqlClient.SqlConnectionStringBuilder
@@ -91,21 +96,37 @@ try {
   if ($tocompSet.Count) { Rows ("SELECT cust_code, locatesub FROM dbo.tb_customer WITH (NOLOCK) WHERE cust_code IN (" + (InList $tocompSet.Keys) + ")") | ForEach-Object { if ($_.locatesub) { $locatesub[$_.cust_code] = $_.locatesub } } }
   $specColor = [ordered]@{}; Rows "SELECT spec_code, bcolor FROM dbo.tb_spec WITH (NOLOCK)" | ForEach-Object { if ($_.bcolor -ne $null) { $specColor[$_.spec_code] = $_.bcolor } }
   $stColor = [ordered]@{}; Rows "SELECT st_code, fcolor FROM dbo.tb_standard WITH (NOLOCK)" | ForEach-Object { if ($_.fcolor -ne $null) { $stColor[$_.st_code] = $_.fcolor } }
+
+  # 재고 (ERP 재고관리 > 원지 재고량 조정 · 제품재고량 조정): 시트에 있는 종이 넘버만
+  #  원지: 남은 재고가 있는 롤의 재고 합계와 롤 수 / LPM: 아직 출고되지 않은 생산분 매수(사양·규격별)
+  function PaperKey($v) { if ($v -eq $null) { return '' } ([string]$v).Normalize([Text.NormalizationForm]::FormKC).Trim() -replace '\s+', '' | ForEach-Object { $_.ToUpperInvariant() } }
+  $paperSet = @{}; foreach ($p in $paperList) { $k = PaperKey $p; if ($k) { $paperSet[$k] = $true } }
+  $stockPapers = [ordered]@{}; $stockLpm = [ordered]@{}
+  if ($paperSet.Count) {
+    Rows "SELECT pattern, COUNT(*) AS rolls, SUM(stock) AS stock FROM dbo.view_patternstock WITH (NOLOCK) WHERE stock<>0 AND ISNULL(nouse,0)=0 GROUP BY pattern" | ForEach-Object {
+      $k = PaperKey $_.pattern; if ($paperSet.ContainsKey($k)) { $stockPapers[$k] = [ordered]@{ stock = $_.stock; rolls = $_.rolls } } }
+    Rows "SELECT pattern, spec, standard, SUM(qnty) AS qnty FROM dbo.view_pdstock WITH (NOLOCK) WHERE out_code IS NULL AND qnty<>0 AND ISNULL(nouse,0)=0 GROUP BY pattern, spec, standard ORDER BY pattern, spec, standard" | ForEach-Object {
+      $k = PaperKey $_.pattern
+      if ($paperSet.ContainsKey($k)) { if (-not $stockLpm.Contains($k)) { $stockLpm[$k] = New-Object System.Collections.ArrayList }; [void]$stockLpm[$k].Add([ordered]@{ s = $_.spec; t = $_.standard; q = $_.qnty }) } }
+  }
+  $stock = [ordered]@{ papers = $stockPapers; lpm = $stockLpm }
   $cn.Close()
 
   $generatedAt = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss') + '+09:00'
   $board = [ordered]@{ locates = $locates; orders = $orders; worksheet = $worksheet; outwait = $outwait; todaylist = $todaylist; wkRemark = $wkRemark;
     sdrequest = $sdrequest; sdOut = $sdOut; icc = $icc; statecomp = $statecomp; locatesub = $locatesub; specColor = $specColor; stColor = $stColor }
-  $summary = "수주 $($orders.Count)건 · 지역 $($locates.Count)개 · 작업지시 $($worksheet.Count) · 출고대기 $($outwait.Count)"
+  $summary = "수주 $($orders.Count)건 · 지역 $($locates.Count)개 · 작업지시 $($worksheet.Count) · 출고대기 $($outwait.Count) · 재고 종이 $($stockPapers.Count)/LPM $($stockLpm.Count) (시트 종이 넘버 $($paperSet.Count))"
 
   if ($DryRun) {
     $target = if ($OutFile) { $OutFile } else { Join-Path $home_ 'board-preview.json' }
-    [IO.File]::WriteAllText($target, (([ordered]@{ generatedAt = $generatedAt; board = $board }) | ConvertTo-Json -Depth 6 -Compress), (New-Object Text.UTF8Encoding($false)))
+    [IO.File]::WriteAllText($target, (([ordered]@{ generatedAt = $generatedAt; board = $board; stock = $stock }) | ConvertTo-Json -Depth 7 -Compress), (New-Object Text.UTF8Encoding($false)))
     Log "시험 실행 완료(전송 안 함): $summary -> $target"
     exit 0
   }
 
-  $res = Api ([ordered]@{ action = 'orderBoardPush'; secret = $pushKey; generatedAt = $generatedAt; board = $board })
+  $payload = [ordered]@{ action = 'orderBoardPush'; secret = $pushKey; generatedAt = $generatedAt; board = $board }
+  if ($paperSet.Count) { $payload.stock = $stock }   # 목록을 못 받았으면 재고는 보내지 않아 이전 재고를 지우지 않는다
+  $res = Api $payload
   if ($res.ok -ne $true) { throw "웹앱 응답 오류: $($res.error)" }
   Log ("전송 완료: $summary" + $(if ($res.skipped) { ' (다른 PC가 더 최신 데이터를 이미 보냄)' } elseif ($res.unchanged) { ' (내용 변화 없음)' } else { '' }))
 } catch {

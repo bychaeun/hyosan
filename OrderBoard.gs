@@ -15,11 +15,13 @@ function orderBoardCheckKey_(body){
   if(!secret||typeof body.secret!=='string'||!orderBoardSafeEqual_(body.secret,secret))throw appError_('수주 전송 키가 올바르지 않습니다.','ORDER_PUSH_DENIED');
 }
 
-/* PC가 조회 전에 묻는다: 다른 PC가 방금 보냈으면 DB 조회를 건너뛴다 */
+/* PC가 조회 전에 묻는다: 다른 PC가 방금 보냈으면 DB 조회를 건너뛴다.
+   papers:true 이면 재고를 조회할 종이 넘버 목록(시트 HYOSAN_LPM에 있는 것만)도 함께 준다 */
 function orderBoardStatus_(body){
   orderBoardCheckKey_(body);
-  const meta=orderBoardMeta_();
-  return {ok:true,updatedAt:meta?meta.updatedAt:null};
+  const meta=orderBoardMeta_(),res={ok:true,updatedAt:meta?meta.updatedAt:null};
+  if(body.papers===true)res.papers=stockPapers_();
+  return res;
 }
 
 function orderBoardPush_(body){
@@ -32,6 +34,7 @@ function orderBoardPush_(body){
   try{
     const sh=orderBoardSheet_(),head=sh.getRange(1,1,1,6).getDisplayValues()[0],previous=head[1]||'';
     if(previous&&previous>generatedAt)return {ok:true,skipped:true,updatedAt:previous};   // 다른 PC가 더 새 데이터를 이미 보냄
+    if(body.stock&&typeof body.stock==='object')stockSave_(body.stock,generatedAt);
     if(head[5]===hash&&Number(head[3])){                                                   // 내용 그대로: 갱신 시각만
       sh.getRange(1,2).setNumberFormat('@').setValue(generatedAt);
       orderBoardCacheMeta_({updatedAt:generatedAt,hash,chunks:Number(head[3])});
@@ -101,6 +104,65 @@ function orderBoardSheet_(){
   const ss=SpreadsheetApp.openById(SPREADSHEET_ID);let sh=ss.getSheetByName(ORDER_BOARD_SHEET);
   if(!sh){sh=ss.insertSheet(ORDER_BOARD_SHEET);sh.hideSheet()}
   return sh;
+}
+
+/* ───── 재고: 사무실 PC가 수주와 같은 전송에 함께 보낸다(body.stock) ─────
+   { papers:{종이넘버:{stock,rolls}}, lpm:{종이넘버:[{s:사양,t:규격,q:매수}]} } — 시트 HYOSAN_LPM의 종이 넘버만.
+   보관: 숨김 시트 STOCK_DATA(압축) + 스크립트 캐시. 상위 사용자만 받는다. */
+const STOCK_SHEET='STOCK_DATA';
+function stockKey_(value){return String(value||'').normalize('NFKC').trim().replace(/\s+/g,'').toUpperCase()}
+function stockPapers_(){
+  const seen=new Set();
+  (getAllData_(false).lpm||[]).forEach(r=>String(r.PaperNumber||r.PaperNo||'').split(/[\r\n,;|]+/).forEach(v=>{const k=stockKey_(v);if(k&&k!=='-')seen.add(k)}));
+  return Array.from(seen).sort();
+}
+function stockSave_(stock,generatedAt){
+  const json=JSON.stringify(stock),hash=Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,json,Utilities.Charset.UTF_8)).slice(0,22);
+  const ss=SpreadsheetApp.openById(SPREADSHEET_ID);let sh=ss.getSheetByName(STOCK_SHEET);if(!sh){sh=ss.insertSheet(STOCK_SHEET);sh.hideSheet()}
+  const head=sh.getRange(1,1,1,6).getDisplayValues()[0];
+  if(head[5]===hash&&Number(head[3])){sh.getRange(1,2).setNumberFormat('@').setValue(generatedAt);stockCachePut_(null,{updatedAt:generatedAt,hash,chunks:Number(head[3])});return}
+  const packed=Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(json,'application/json')).getBytes());
+  const chunks=[];for(let i=0;i<packed.length;i+=ORDER_BOARD_CHUNK)chunks.push([packed.slice(i,i+ORDER_BOARD_CHUNK)]);
+  if(sh.getMaxRows()<chunks.length+1)sh.insertRowsAfter(sh.getMaxRows(),chunks.length+1-sh.getMaxRows());
+  sh.getRange(2,1,sh.getMaxRows()-1,1).clearContent();
+  sh.getRange(2,1,chunks.length,1).setNumberFormat('@').setValues(chunks);
+  sh.getRange(1,1,1,6).setNumberFormat('@').setValues([['updatedAt',generatedAt,'chunks',String(chunks.length),'hash',hash]]);
+  stockCachePut_(json,{updatedAt:generatedAt,hash,chunks:chunks.length});
+}
+function stockMeta_(){
+  try{const cached=CacheService.getScriptCache().get('stock-meta');if(cached)return JSON.parse(cached)}catch(e){}
+  const sh=SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(STOCK_SHEET);if(!sh)return null;
+  const head=sh.getRange(1,1,1,6).getDisplayValues()[0];if(!Number(head[3]))return null;
+  const meta={updatedAt:head[1]||null,hash:head[5]||'',chunks:Number(head[3]),parts:0};
+  stockCachePut_(null,meta);return meta;
+}
+function stockRaw_(meta){
+  if(meta.parts){
+    const keys=[];for(let i=0;i<meta.parts;i++)keys.push('stock-raw-'+i);
+    try{const got=CacheService.getScriptCache().getAll(keys);if(keys.every(k=>got[k]!=null))return keys.map(k=>got[k]).join('')}catch(e){}
+  }
+  const sh=SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(STOCK_SHEET);
+  const packed=sh.getRange(2,1,meta.chunks,1).getDisplayValues().map(r=>r[0]).join('');
+  const json=Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(packed),'application/x-gzip')).getDataAsString('UTF-8');
+  stockCachePut_(json,meta);return json;
+}
+// json이 없으면 메타만 갱신(본문 캐시는 지문이 같을 때만 유지)
+function stockCachePut_(json,meta){
+  try{
+    const cache=CacheService.getScriptCache(),values={};let parts=0;
+    if(json!=null){parts=Math.ceil(json.length/ORDER_CACHE_CHUNK);for(let i=0;i<parts;i++)values['stock-raw-'+i]=json.slice(i*ORDER_CACHE_CHUNK,(i+1)*ORDER_CACHE_CHUNK)}
+    else{const old=JSON.parse(cache.get('stock-meta')||'{}');parts=old.hash===meta.hash?old.parts||0:0}
+    values['stock-meta']=JSON.stringify({updatedAt:meta.updatedAt,hash:meta.hash,chunks:meta.chunks,parts});
+    cache.putAll(values,ORDER_CACHE_TTL);
+  }catch(e){}
+}
+function stockResponse_(body,user){
+  const meta=stockMeta_();
+  if(!meta)return jsonOutput(renewSessionResponse_(body,user,{ok:true,stock:null,updatedAt:null}));
+  const head=renewSessionResponse_(body,user,{ok:true,updatedAt:meta.updatedAt,hash:meta.hash});
+  if(body.since&&body.since===meta.hash){head.notModified=true;return jsonOutput(head)}
+  const text=JSON.stringify(head);
+  return ContentService.createTextOutput(text.slice(0,-1)+',"stock":'+stockRaw_(meta)+'}').setMimeType(ContentService.MimeType.JSON);
 }
 
 function orderBoardSafeEqual_(a,b){
