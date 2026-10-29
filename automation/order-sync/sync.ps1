@@ -1,6 +1,6 @@
 ﻿# 수주현황판 자동 전송 — 업체 ERP DB(읽기 전용)에서 원본 수주현황판 조회를 그대로 실행해 효산 웹앱으로 보낸다.
 # 작업 스케줄러가 10분마다 실행. 계정·전송 키는 %APPDATA%\hyosan-board 에 이 PC·이 윈도우 계정 전용으로 암호화 저장.
-param([switch]$DryRun, [string]$OutFile, [string[]]$Papers)   # -Papers: 시험 실행 때 재고 조회할 종이 넘버를 직접 지정
+param([switch]$DryRun, [string]$OutFile, [string[]]$Papers, [switch]$Force)   # -Papers: 시험 실행 때 재고 조회할 종이 넘버를 직접 지정 · -Force: 다른 PC가 방금 보냈어도 지금 보냄
 $ErrorActionPreference = 'Stop'
 $home_ = Join-Path $env:APPDATA 'hyosan-board'
 $log = Join-Path $home_ 'sync.log'
@@ -23,7 +23,7 @@ try {
     if ($status.papers) { $paperList = @($status.papers) }
   }
   if ($DryRun -and $Papers) { $paperList = @($Papers | ForEach-Object { $_ -split ',' }) }
-  if (-not $DryRun -and $status.updatedAt) {
+  if (-not $DryRun -and -not $Force -and $status.updatedAt) {
       $age = ((Get-Date) - [datetime]::ParseExact($status.updatedAt.Substring(0, 19), 'yyyy-MM-ddTHH:mm:ss', $null)).TotalMinutes
       if ($age -ge 0 -and $age -lt 8) { Log ("건너뜀: 다른 PC가 {0:N0}분 전에 보냄" -f $age); exit 0 }
   }
