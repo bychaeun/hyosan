@@ -54,11 +54,12 @@ test('long-idle orders without production are hidden like the ERP procedure',()=
   {...base,sj_code:'OLD_PD',state:'오더접수',ord_date:'2026-02-23T15:00:00+09:00'},
   {...base,sj_code:'OLD_WK',state:'생산지시',ord_date:'2026-02-22T15:00:00+09:00'},
   {...base,sj_code:'NEW',state:'오더접수',ord_date:'2026-10-13T15:00:00+09:00'},
+  {...base,sj_code:'HELD101',state:'오더접수',ord_date:'2026-07-20T15:00:00+09:00',express:3},   /* ERP에 보임 (한솔홈데코 12844/12845) */
   {...base,sj_code:'BUSY',state:'생산중',ord_date:'2025-01-01T15:00:00+09:00'}
  ];
  const items=load().computeRegion({...data,orders,outwait:[{sj_code:'OLD_PD',mode:1,out_code:null,up_code:null,wk_code:null,qnty:100}],worksheet:[],todaylist:[]},'99',NOW);
- assert.deepEqual(items.filter(x=>x.type==='order').map(x=>x.sj),['OLD_PD','NEW','BUSY']);
- assert.equal(items.find(x=>x.type==='sum').remain,30);
+ assert.deepEqual(items.filter(x=>x.type==='order').map(x=>x.sj),['OLD_PD','NEW','HELD101','BUSY']);
+ assert.equal(items.find(x=>x.type==='sum').remain,40);
 });
 
 test('order board menu and backend routes are wired',()=>{
