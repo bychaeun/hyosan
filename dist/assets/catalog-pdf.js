@@ -25,7 +25,7 @@ function pdfFromJpegs(pages){
 
 function pdfCardText(item,type){
  if(type==='pattern')return {title:item.PatternName_KR||item.PatternName_EN||'-',sub:item.SubCategory||'',extra:'',image:item.MainImageURL||item.ImageURL};
- if(type==='special'){const linked=indexes.lpm.get(item.LinkedLPM_ID);return {title:item.SpecialSpecNumber||'-',sub:[specialMajorValue(item),specialSubValue(item)].filter(Boolean).join(' · '),extra:'',image:item.ImageURL||(linked&&linked.ImageURL)}}
+ if(type==='special')return {title:item.SpecialSpecNumber||'-',sub:[specialMajorValue(item),specialSubValue(item)].filter(Boolean).join(' · '),extra:'',image:specialSpecImage(item)};
  if(type==='emboss')return {title:item.PlateName||'-',sub:item.Company||'',extra:'',image:item.ImageURL};
  if(type==='site'){const dates=[item.MHOpenDate&&'MH '+item.MHOpenDate,item.CompletionDate&&'완공 '+item.CompletionDate].filter(Boolean).join(' · ');return {title:item.SiteName||item.Company||'-',sub:[siteTypeLabel(item),siteCategoryValue(item)].filter(Boolean).join(' · '),extra:dates,image:item.ImageURL}}
  const prev=String(item.PreviousNames||'').trim();   // 종이 넘버는 PC 인쇄본처럼 넣지 않는다
