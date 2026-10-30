@@ -74,7 +74,6 @@ function renewSessionResponse_(body,user,response){
   }catch(e){}
   return response;
 }
-
 function verifySessionToken_(token){
   const parts=String(token||'').split('.');if(parts.length!==2)throw appError_('로그인이 만료되었습니다.','INVALID_SESSION');
   const expected=Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(parts[0],getSessionSecret_())).replace(/=+$/,'');if(parts[1]!==expected)throw appError_('로그인이 만료되었습니다.','INVALID_SESSION');
@@ -269,7 +268,6 @@ function imageVersionBatch_(requested,force){
   }
   return versions;
 }
-// Keep older published clients compatible while sites store LPM IDs and emboss separately.
 function integrateSiteSpecs_(out){
   const byId=new Map(out.lpm.map(x=>[x.LPM_ID,x])),aliases=new Map();
   const lines=v=>String(v||'').split(/\r?\n/).map(s=>s.trim());
@@ -337,8 +335,6 @@ function readSheet_(ss,name){
   return rowsFromValues_(sh.getRange(1,1,lastRow,lastColumn).getDisplayValues());
 }
 
-function lpmDisplayName_(item){return String(item.ProductName||'').trim()||String(item.PaperNumber||item.PaperNo||item.PatternForm||'').trim()||'-'}
-
 function getLpmsForExport_(lpmIds){
   const ids=Array.from(new Set((Array.isArray(lpmIds)?lpmIds:[lpmIds]).map(v=>String(v||'').trim()).filter(Boolean))).slice(0,50);
   if(!ids.length)throw new Error('lpmId is required');
@@ -346,6 +342,8 @@ function getLpmsForExport_(lpmIds){
   if(!items.length)throw new Error('선택한 LPM 제품을 찾을 수 없습니다.');
   return items;
 }
+
+function lpmDisplayName_(item){return String(item.ProductName||'').trim()||String(item.PaperNumber||item.PaperNo||item.PatternForm||'').trim()||item.LPM_ID||'';}
 
 function exportImageUrls_(item){
   const values=[item.ImageURL,item.ImageURLs,item.ImageURL2,item.ImageURL3],seen={};
@@ -355,30 +353,100 @@ function exportImageUrls_(item){
 function exportToSlides_(lpmIds,requesterEmail,cfg,level){
   cfg=cfg||getConfig_();
   const items=dataForLevel_({lpm:getLpmsForExport_(lpmIds)},level).lpm,title=items.length===1?'HYOSAN LPM Export - '+lpmDisplayName_(items[0]):'HYOSAN LPM Export - '+items.length+' products',destinationId=String(cfg.SLIDES_DESTINATION_ID||'').trim();
+  const images=exportImageBlobs_(items);   // 사진은 슬라이드를 만드는 동안 기다리지 않도록 먼저 한꺼번에 받는다
   let pres,created=false,destinationWarning='';
   if(destinationId){
     try{pres=SlidesApp.openById(destinationId)}
     catch(err){destinationWarning='설정된 슬라이드 파일을 열 수 없어 새 파일로 생성했습니다.';pres=SlidesApp.create(title);created=true}
   }else{pres=SlidesApp.create(title);created=true}
-  const initialSlide=created?pres.getSlides()[0]:null,W=pres.getPageWidth(),H=pres.getPageHeight(),results=items.map(item=>appendLpmSlide_(pres,item,W,H));
-  if(initialSlide)initialSlide.remove();
-  const presentationId=pres.getId(),url='https://docs.google.com/presentation/d/'+presentationId+'/edit';
+  const presentationId=pres.getId(),W=pres.getPageWidth(),H=pres.getPageHeight(),initialSlideId=created?pres.getSlides()[0].getObjectId():'',imageSize=Math.min(H,W*.58);
+  pres.saveAndClose();
+  // 슬라이드·글자는 Slides API 요청 한 번으로 만든다(예전: 글자 칸마다 여러 번 요청)
+  const stamp=Date.now().toString(36),requests=[],slideIds=items.map((item,i)=>'hy'+stamp+'s'+i);
+  items.forEach((item,i)=>{
+    const sid=slideIds[i],x=W*.62,w=W*.32,paper=String(item.PaperNumber||item.PaperNo||item.PatternForm||'').trim(),specials=lpmSpecialNumbers_(item).join(', ');   // 하위 사용자는 종이 넘버가 이미 빠져 있다
+    requests.push({createSlide:{objectId:sid,slideLayoutReference:{predefinedLayout:'BLANK'}}});
+    const text=(key,value,y,h,size,bold)=>slideTextRequests_(requests,sid+key,sid,String(value||''),x,y,w,h,size,bold);
+    text('n',lpmDisplayName_(item),H*.12,40,15,true);
+    let y=H*.25;
+    if(paper){text('pl','종이 넘버',y,18,11,true);text('pv',paper,y+H*.05,24,8,false);y+=H*.16}
+    if(specials){text('sl','특별넘버',y,18,11,true);text('sv',specials,y+H*.05,44,8,false)}
+  });
+  if(initialSlideId)requests.push({deleteObject:{objectId:initialSlideId}});
+  const batched=slidesBatchUpdate_(presentationId,requests);
+  pres=SlidesApp.openById(presentationId);
+  const slides=batched?slideIds.map(id=>pres.getSlideById(id)):slidesFromRequests_(pres,requests);
+  // 사진: 받아 둔 사진을 정사각형으로 채워 넣는다(못 받은 사진은 예전 방식으로 한 번 더 시도)
+  const results=items.map((item,i)=>{
+    const slide=slides[i];let imageInserted=false;
+    try{
+      if(images[i]){const holder=slide.insertShape(SlidesApp.ShapeType.RECTANGLE,0,(H-imageSize)/2,imageSize,imageSize);try{holder.replaceWithImage(images[i],true);imageInserted=true}catch(err){try{holder.remove()}catch(e){}console.warn('Slides image failed for '+item.LPM_ID+': '+err.message)}}
+      if(!imageInserted)imageInserted=insertSquareImage_(slide,exportImageUrls_(item),0,(H-imageSize)/2,imageSize);
+    }catch(err){console.warn('Slides image failed for '+item.LPM_ID+': '+err.message)}
+    return {id:item.LPM_ID,imageInserted:imageInserted};
+  });
+  const url='https://docs.google.com/presentation/d/'+presentationId+'/edit';
   pres.saveAndClose();
   const sharing=sharePresentation_(presentationId,requesterEmail,cfg),warnings=[destinationWarning,sharing.warning||''].filter(Boolean).join(' '),failed=results.filter(r=>!r.imageInserted);
   return {ok:true,presentationId:presentationId,url:url,imageInserted:failed.length===0,exportedCount:results.length,failedCount:failed.length,failedIds:failed.map(r=>r.id),sharedWith:sharing.shared?requesterEmail:'',shareWarning:warnings};
 }
 
-function appendLpmSlide_(pres,item,W,H){
-  const slide=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK),imageSize=Math.min(H,W*.58);
-  let imageInserted=false;
-  try{imageInserted=insertSquareImage_(slide,exportImageUrls_(item),0,(H-imageSize)/2,imageSize)}catch(err){console.warn('Slides image failed for '+item.LPM_ID+': '+err.message)}
-  const x=W*.62,w=W*.32;
-  addText_(slide,lpmDisplayName_(item),x,H*.12,w,40,15,true);
-  if(item.PaperNumber||item.PaperNo||item.PatternForm){addText_(slide,'종이 넘버',x,H*.23,w,18,11,true);addText_(slide,item.PaperNumber||item.PaperNo||item.PatternForm,x,H*.28,w,24,8,false)}   // 하위 사용자는 종이 넘버 없이
-  addText_(slide,'샘플북',x,H*.39,w,18,11,true);addText_(slide,item.SampleBook||'-',x,H*.44,w,24,8,false);
-  addText_(slide,'분류',x,H*.55,w,18,11,true);addText_(slide,item.Category||'-',x,H*.60,w,24,8,false);
-  addText_(slide,'용도',x,H*.71,w,18,11,true);addText_(slide,item.Applications||'-',x,H*.76,w,44,8,false);
-  return {id:item.LPM_ID,imageInserted:imageInserted};
+function lpmSpecialNumbers_(item){
+  const seen={};
+  return String(item.SpecialNumbers||item['특별넘버']||'').split(/[\r\n]+/).map(v=>v.replace(/\([^)]*\)/g,'').trim()).filter(v=>v&&!seen[v]&&(seen[v]=true));
+}
+
+// 글자 칸 하나 = 요청 3개(칸 만들기·글자 넣기·글꼴). 예전 SlidesApp 방식과 같은 위치·크기·글꼴
+function slideTextRequests_(requests,id,slideId,text,x,y,w,h,size,bold){
+  requests.push({createShape:{objectId:id,shapeType:'TEXT_BOX',elementProperties:{pageObjectId:slideId,size:{width:{magnitude:w,unit:'PT'},height:{magnitude:h,unit:'PT'}},transform:{scaleX:1,scaleY:1,translateX:x,translateY:y,unit:'PT'}}}});
+  if(!text)return;
+  requests.push({insertText:{objectId:id,insertionIndex:0,text:text}});
+  requests.push({updateTextStyle:{objectId:id,textRange:{type:'ALL'},style:{fontFamily:'Noto Sans KR',fontSize:{magnitude:size,unit:'PT'},bold:!!bold,foregroundColor:{opaqueColor:{rgbColor:{red:23/255,green:23/255,blue:23/255}}}},fields:'fontFamily,fontSize,bold,foregroundColor'}});
+}
+
+// Slides API가 이 프로젝트에서 꺼져 있으면 false → SlidesApp으로 같은 내용을 만든다
+function slidesBatchUpdate_(presentationId,requests){
+  const response=UrlFetchApp.fetch('https://slides.googleapis.com/v1/presentations/'+encodeURIComponent(presentationId)+':batchUpdate',{method:'post',contentType:'application/json',headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()},payload:JSON.stringify({requests:requests}),muteHttpExceptions:true});
+  const code=response.getResponseCode(),body=response.getContentText();
+  if(code>=200&&code<300)return true;
+  if(code===403&&/SERVICE_DISABLED|has not been used|is disabled/i.test(body))return false;
+  throw new Error('슬라이드 만들기 실패(HTTP '+code+'): '+body.slice(0,300));
+}
+
+function slidesFromRequests_(pres,requests){
+  const pages={},out=[],shapes={};
+  requests.forEach(r=>{
+    if(r.createSlide){const slide=pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);pages[r.createSlide.objectId]=slide;out.push(slide)}
+    else if(r.createShape){const e=r.createShape.elementProperties;shapes[r.createShape.objectId]={slide:pages[e.pageObjectId],x:e.transform.translateX,y:e.transform.translateY,w:e.size.width.magnitude,h:e.size.height.magnitude};const sh=shapes[r.createShape.objectId];sh.box=sh.slide.insertTextBox('',sh.x,sh.y,sh.w,sh.h)}
+    else if(r.insertText){shapes[r.insertText.objectId].box.getText().setText(r.insertText.text)}
+    else if(r.updateTextStyle){const st=r.updateTextStyle.style;shapes[r.updateTextStyle.objectId].box.getText().getTextStyle().setFontFamily(st.fontFamily).setFontSize(st.fontSize.magnitude).setBold(st.bold).setForegroundColor('#171717')}
+    else if(r.deleteObject){try{pres.getSlideById(r.deleteObject.objectId).remove()}catch(e){}}
+  });
+  return out;
+}
+
+// 제품마다 첫 번째 사진을 동시에 받는다. 드라이브 사진은 원본 대신 1600px 축소본(원본은 Slides 삽입 한도 25MP를 넘기 쉽다)
+function exportImageBlobs_(items){
+  const out=items.map(()=>null),auth={Authorization:'Bearer '+ScriptApp.getOAuthToken()},firsts=items.map(item=>exportImageUrls_(item)[0]||'');
+  try{
+    const metaIdx=[],metaReq=[];
+    firsts.forEach((url,i)=>{const id=driveFileId_(url);if(id){metaIdx.push(i);metaReq.push({url:'https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?fields=thumbnailLink&supportsAllDrives=true',headers:auth,muteHttpExceptions:true})}});
+    const getIdx=[],getReq=[];
+    (metaReq.length?UrlFetchApp.fetchAll(metaReq):[]).forEach((res,k)=>{
+      if(res.getResponseCode()!==200)return;
+      const link=JSON.parse(res.getContentText()).thumbnailLink;
+      if(link){getIdx.push(metaIdx[k]);getReq.push({url:link.replace(/=s\d+$/,'')+'=s1600',headers:auth,muteHttpExceptions:true})}
+    });
+    firsts.forEach((url,i)=>{if(url&&!driveFileId_(url)){getIdx.push(i);getReq.push({url:url,followRedirects:true,muteHttpExceptions:true})}});
+    for(let start=0;start<getReq.length;start+=20){
+      UrlFetchApp.fetchAll(getReq.slice(start,start+20)).forEach((res,k)=>{
+        if(res.getResponseCode()!==200)return;
+        const blob=res.getBlob(),type=blob.getContentType()||'';
+        if(/^image\//i.test(type))out[getIdx[start+k]]=/^image\/(?:png|jpeg|gif)$/i.test(type)?blob:blob.getAs('image/png');
+      });
+    }
+  }catch(err){console.warn('Parallel image fetch incomplete: '+err.message)}
+  return out;
 }
 
 function sharePresentation_(presentationId,requesterEmail,cfg){
@@ -392,10 +460,6 @@ function sharePresentation_(presentationId,requesterEmail,cfg){
     if(code<200||code>=300)throw new Error('HTTP '+code+' '+response.getContentText().slice(0,240));
     return {shared:true};
   }catch(err){return {shared:false,warning:'슬라이드는 생성됐지만 요청 계정 자동 공유에 실패했습니다. 관리자에게 Drive 파일 공유 권한 승인을 요청해 주세요.'}}
-}
-
-function addText_(slide,text,x,y,w,h,size,bold){
-  const box=slide.insertTextBox(String(text||''),x,y,w,h),style=box.getText().getTextStyle();style.setFontFamily('Noto Sans KR').setFontSize(size).setBold(!!bold).setForegroundColor('#171717');return box;
 }
 
 function firstImageUrl_(value){return String(value||'').split(/[\r\n,;|]+/).map(v=>v.trim()).find(v=>/^https?:\/\//i.test(v))||''}
