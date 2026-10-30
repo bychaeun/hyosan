@@ -24,6 +24,8 @@ function pdfFromJpegs(pages){
 }
 
 function pdfCardText(item,type){
+ if(type==='pattern')return {title:item.PatternName_KR||item.PatternName_EN||'-',sub:item.SubCategory||'',extra:'',image:item.MainImageURL||item.ImageURL};
+ if(type==='special'){const linked=indexes.lpm.get(item.LinkedLPM_ID);return {title:item.SpecialSpecNumber||'-',sub:[specialMajorValue(item),specialSubValue(item)].filter(Boolean).join(' · '),extra:'',image:item.ImageURL||(linked&&linked.ImageURL)}}
  if(type==='emboss')return {title:item.PlateName||'-',sub:item.Company||'',extra:'',image:item.ImageURL};
  if(type==='site'){const dates=[item.MHOpenDate&&'MH '+item.MHOpenDate,item.CompletionDate&&'완공 '+item.CompletionDate].filter(Boolean).join(' · ');return {title:item.SiteName||item.Company||'-',sub:[siteTypeLabel(item),siteCategoryValue(item)].filter(Boolean).join(' · '),extra:dates,image:item.ImageURL}}
  const prev=String(item.PreviousNames||'').trim();   // 종이 넘버는 PC 인쇄본처럼 넣지 않는다
@@ -86,7 +88,7 @@ async function downloadCatalogPdf(rows,type){
   actionStatus('PDF 만드는 중… '+(p+1)+' / '+pages+'쪽');
   out.push(await renderPdfPage(rows.slice(p*PDF_PAGE_SIZE,(p+1)*PDF_PAGE_SIZE),type,p,pages,rows.length,logo,font));
  }
- const d=new Date(),name='HYOSAN-'+(type==='emboss'?'EMBOSS':type==='site'?'SITE':'LPM')+'-'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'.pdf';
+ const d=new Date(),name='HYOSAN-'+({emboss:'EMBOSS',site:'SITE',pattern:'PATTERN',special:'SPECIAL'}[type]||'LPM')+'-'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'.pdf';
  const url=URL.createObjectURL(pdfFromJpegs(out)),a=document.createElement('a');
  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),120000);
  return 'PDF를 저장했습니다: '+name+' ('+rows.length+'개 · '+pages+'쪽)';
