@@ -15,6 +15,7 @@ function doGet(e){
 
 function doPost(e){
   try{
+    prefetchScriptCache_();   // 설정·사용자·데이터 버전을 캐시에서 한 번에 읽는다(예전: 요청마다 3번)
     const body=JSON.parse((e&&e.postData&&e.postData.contents)||'{}'),cfg=getConfig_();
     if(body.action==='authStatus'){
       const identity=verifyGoogleToken_(body.idToken,cfg),loginUser=touchUser_(identity,cfg),loginBlock=maintenanceBlock_(loginUser,cfg);
@@ -48,8 +49,14 @@ function doPost(e){
   }catch(err){return jsonOutput({ok:false,error:String(err),code:err&&err.code?err.code:'REQUEST_FAILED'})}
 }
 
+// 한 요청 안에서 쓰는 캐시 값은 getAll 한 번으로 미리 받아 둔다
+let REQUEST_CACHE_=null;
+function prefetchScriptCache_(){try{REQUEST_CACHE_=CacheService.getScriptCache().getAll(['app-config-v1',USER_CACHE_KEY,DATA_CACHE_PREFIX+'meta'])}catch(e){REQUEST_CACHE_=null}}
+function scriptCacheGet_(cache,key){if(REQUEST_CACHE_&&Object.prototype.hasOwnProperty.call(REQUEST_CACHE_,key)){const v=REQUEST_CACHE_[key];delete REQUEST_CACHE_[key];return v}return cache.get(key)}
+function forgetRequestCache_(key){if(REQUEST_CACHE_)delete REQUEST_CACHE_[key]}
+
 function getConfig_(){
-  const cache=CacheService.getScriptCache(),key='app-config-v1',cached=cache.get(key);
+  const cache=CacheService.getScriptCache(),key='app-config-v1',cached=scriptCacheGet_(cache,key);
   if(cached){try{return JSON.parse(cached)}catch(e){}}
   const ss=SpreadsheetApp.openById(SPREADSHEET_ID),cfg={};
   readSheet_(ss,SHEET_NAMES.config).forEach(r=>{if(r.KEY)cfg[r.KEY]=r.VALUE});
@@ -88,14 +95,14 @@ function getSessionSecret_(){const props=PropertiesService.getScriptProperties()
 
 const USER_CACHE_KEY='app-users-v1';
 function readUsers_(){
-  const cache=CacheService.getScriptCache(),cached=cache.get(USER_CACHE_KEY);
+  const cache=CacheService.getScriptCache(),cached=scriptCacheGet_(cache,USER_CACHE_KEY);
   if(cached){try{return JSON.parse(cached)}catch(e){}}
   const rows=readSheet_(SpreadsheetApp.openById(SPREADSHEET_ID),SHEET_NAMES.users);
   // 승인·중지·로그인 기록을 앱에서 바꾸면 clearUserCache_로 즉시 지워진다. 시트를 직접 고친 경우만 최대 5분 뒤 반영.
   try{cache.put(USER_CACHE_KEY,JSON.stringify(rows),300)}catch(e){}
   return rows;
 }
-function clearUserCache_(){try{CacheService.getScriptCache().remove(USER_CACHE_KEY)}catch(e){}}
+function clearUserCache_(){forgetRequestCache_(USER_CACHE_KEY);try{CacheService.getScriptCache().remove(USER_CACHE_KEY)}catch(e){}}
 
 function getUserByEmail_(email){
   const user=readUsers_().find(r=>String(r.Email||'').toLowerCase()===String(email||'').toLowerCase());if(!user)throw appError_('사용자를 찾을 수 없습니다.','USER_NOT_FOUND');return user;
@@ -210,7 +217,7 @@ function setMaintenance_(admin,on,message){
     const put=(key,value)=>{let row=values.findIndex((r,i)=>i>0&&String(r[kc-1]).trim()===key)+1;if(!row){row=sh.getLastRow()+1;sh.getRange(row,kc).setValue(key);values.push([])}sh.getRange(row,vc).setValue(value)};
     put('MAINTENANCE_ON',on?'TRUE':'FALSE');put('MAINTENANCE_MESSAGE',message);
   }finally{lock.releaseLock()}
-  CacheService.getScriptCache().remove('app-config-v1');
+  forgetRequestCache_('app-config-v1');CacheService.getScriptCache().remove('app-config-v1');
   return {ok:true,maintenance:{on:on,message:message}};
 }
 
@@ -218,7 +225,7 @@ function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
 const DATA_CACHE_PREFIX='library-data-v17-';
-function cachedDataHash_(){try{return (JSON.parse(CacheService.getScriptCache().get(DATA_CACHE_PREFIX+'meta')||'null')||{}).hash||''}catch(e){return ''}}
+function cachedDataHash_(){try{return (JSON.parse(scriptCacheGet_(CacheService.getScriptCache(),DATA_CACHE_PREFIX+'meta')||'null')||{}).hash||''}catch(e){return ''}}
 function readDataCache_(cache){
   try{
     const meta=JSON.parse(cache.get(DATA_CACHE_PREFIX+'meta')||'null');if(!meta||!meta.count)return null;
