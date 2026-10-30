@@ -1,7 +1,7 @@
 const SPREADSHEET_ID='1RC-6ibPA86zaWOGt1rzgmQf9tLpT4OcgdI6K9XcUPTI';
 const SHEET_NAMES={patterns:'PATTERN_DESIGN',lpm:'HYOSAN_LPM',specialSpecs:'SPECIAL_SPECS',emboss:'EMBOSS_PLATE',sites:'CONSTRUCTION_SITES',config:'CONFIG',users:'APP_USERS'};
 const USER_HEADERS=['Email','Name','PictureURL','Status','RequestedAt','LastLoginAt','ApprovedBy','ApprovedAt'];
-// LPM index and image synchronization is maintained in IndexSync.gs.
+// LPM index and image synchronization runs in the separate HYOSAN INDEX SYNC project (automation/HourlyIndexSync.gs).
 
 function doGet(e){
   try{
