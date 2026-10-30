@@ -17,13 +17,16 @@ function doPost(e){
   try{
     const body=JSON.parse((e&&e.postData&&e.postData.contents)||'{}'),cfg=getConfig_();
     if(body.action==='authStatus'){
-      const identity=verifyGoogleToken_(body.idToken,cfg),loginUser=touchUser_(identity,cfg),loginResponse=userResponse_(loginUser);
+      const identity=verifyGoogleToken_(body.idToken,cfg),loginUser=touchUser_(identity,cfg),loginBlock=maintenanceBlock_(loginUser,cfg);
+      if(loginBlock)return jsonOutput(loginBlock);   // 점검 중: 관리자 말고는 로그인도 받지 않는다
+      const loginResponse=userResponse_(loginUser);
       if(loginResponse.ok)loginResponse.sessionToken=createSessionToken_(loginUser.Email);
       return jsonOutput(loginResponse);
     }
     if(body.action==='orderBoardPush')return jsonOutput(orderBoardPush_(body));     // 사무실 PC 자동 전송 (OrderBoard.gs)
     if(body.action==='orderBoardStatus')return jsonOutput(orderBoardStatus_(body));
-    const user=authenticateRequest_(body,cfg);
+    const user=authenticateRequest_(body,cfg),blocked=maintenanceBlock_(user,cfg);
+    if(blocked)return jsonOutput(blocked);
     if(body.action==='sessionStatus')return jsonOutput(renewSessionResponse_(body,user,userResponse_(user)));
     if(user.Status!=='ADMIN'&&user.Status!=='APPROVED')return jsonOutput(userResponse_(user));
     if(body.action==='imageVersions')return jsonOutput({ok:true,imageVersions:imageVersionBatch_(body.ids,body.force===true)});
@@ -40,6 +43,7 @@ function doPost(e){
     if(body.action==='listUsers')return jsonOutput(listUsers_(user));
     if(body.action==='setUserStatus')return jsonOutput(setUserStatus_(user,body.email,body.status));
     if(body.action==='setUserLevel')return jsonOutput(setUserLevel_(user,body.email,body.level));
+    if(body.action==='setMaintenance')return jsonOutput(setMaintenance_(user,body.on===true,body.message));
     return jsonOutput({ok:false,error:'Unknown action'});
   }catch(err){return jsonOutput({ok:false,error:String(err),code:err&&err.code?err.code:'REQUEST_FAILED'})}
 }
@@ -143,7 +147,7 @@ function getUserSheet_(ss){
 
 function userResponse_(user){
   const status=user.Status||'PENDING';
-  return {ok:status==='ADMIN'||status==='APPROVED',code:status==='PENDING'?'APPROVAL_PENDING':status==='REVOKED'?'ACCESS_REVOKED':'',status:status,user:{email:user.Email,name:user.Name,picture:user.PictureURL,isAdmin:status==='ADMIN',level:userLevel_(user)},message:status==='PENDING'?'관리자 승인을 기다리고 있습니다.':status==='REVOKED'?'관리자가 사용 권한을 중지했습니다.':''};
+  return {ok:status==='ADMIN'||status==='APPROVED',code:status==='PENDING'?'APPROVAL_PENDING':status==='REVOKED'?'ACCESS_REVOKED':'',status:status,user:{email:user.Email,name:user.Name,picture:user.PictureURL,isAdmin:status==='ADMIN',level:userLevel_(user),maintenance:status==='ADMIN'?maintenanceState_():undefined},message:status==='PENDING'?'관리자 승인을 기다리고 있습니다.':status==='REVOKED'?'관리자가 사용 권한을 중지했습니다.':''};
 }
 
 // 사용자 단계 — 상위(FULL): 수주현황판·종이 넘버·원지 회사명·재고까지, 하위(BASIC): 그 밖의 라이브러리만.
@@ -165,7 +169,7 @@ function levelColumn_(sh){
 
 function listUsers_(admin){
   assertAdmin_(admin);const rows=readUsers_();
-  return {ok:true,users:rows.map(r=>({email:r.Email,name:r.Name,picture:r.PictureURL,status:r.Status,level:userLevel_(r),requestedAt:r.RequestedAt,lastLoginAt:r.LastLoginAt,approvedBy:r.ApprovedBy,approvedAt:r.ApprovedAt}))};
+  return {ok:true,maintenance:maintenanceState_(),users:rows.map(r=>({email:r.Email,name:r.Name,picture:r.PictureURL,status:r.Status,level:userLevel_(r),requestedAt:r.RequestedAt,lastLoginAt:r.LastLoginAt,approvedBy:r.ApprovedBy,approvedAt:r.ApprovedAt}))};
 }
 
 function setUserLevel_(admin,email,level){
@@ -186,6 +190,28 @@ function setUserStatus_(admin,email,status){
   const ss=SpreadsheetApp.openById(SPREADSHEET_ID),sh=getUserSheet_(ss),values=sh.getDataRange().getDisplayValues(),now=new Date().toISOString();
   for(let i=1;i<values.length;i++)if(String(values[i][0]||'').toLowerCase()===email){sh.getRange(i+1,4).setValue(status);sh.getRange(i+1,7,1,2).setValues([[admin.Email,now]]);clearUserCache_();return {ok:true,email:email,status:status}}
   throw appError_('사용자를 찾을 수 없습니다.','USER_NOT_FOUND');
+}
+
+// 점검 모드 — CONFIG 시트의 MAINTENANCE_ON(TRUE/FALSE)·MAINTENANCE_MESSAGE. 시트에서 직접 바꿔도 5분 안에 반영된다
+const MAINTENANCE_DEFAULT_MESSAGE='지금은 점검 중입니다.';
+function maintenanceState_(cfg){cfg=cfg||getConfig_();return {on:/^(true|1|on|y|yes)$/i.test(String(cfg.MAINTENANCE_ON||'').trim()),message:String(cfg.MAINTENANCE_MESSAGE||'').trim()}}
+function maintenanceBlock_(user,cfg){
+  if(!user||user.Status==='ADMIN')return null;const m=maintenanceState_(cfg);
+  return m.on?{ok:false,code:'MAINTENANCE',error:m.message||MAINTENANCE_DEFAULT_MESSAGE,maintenance:m}:null;
+}
+function setMaintenance_(admin,on,message){
+  assertAdmin_(admin);message=String(message||'').trim().slice(0,300);
+  const lock=LockService.getScriptLock();lock.waitLock(10000);
+  try{
+    const ss=SpreadsheetApp.openById(SPREADSHEET_ID);let sh=ss.getSheetByName(SHEET_NAMES.config);
+    if(!sh){sh=ss.insertSheet(SHEET_NAMES.config);sh.getRange(1,1,1,2).setValues([['KEY','VALUE']])}
+    const width=Math.max(sh.getLastColumn(),2),values=sh.getRange(1,1,Math.max(sh.getLastRow(),1),width).getDisplayValues(),head=values[0].map(v=>String(v).trim());
+    const kc=head.indexOf('KEY')>=0?head.indexOf('KEY')+1:1,vc=head.indexOf('VALUE')>=0?head.indexOf('VALUE')+1:2;
+    const put=(key,value)=>{let row=values.findIndex((r,i)=>i>0&&String(r[kc-1]).trim()===key)+1;if(!row){row=sh.getLastRow()+1;sh.getRange(row,kc).setValue(key);values.push([])}sh.getRange(row,vc).setValue(value)};
+    put('MAINTENANCE_ON',on?'TRUE':'FALSE');put('MAINTENANCE_MESSAGE',message);
+  }finally{lock.releaseLock()}
+  CacheService.getScriptCache().remove('app-config-v1');
+  return {ok:true,maintenance:{on:on,message:message}};
 }
 
 function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관리자 권한이 필요합니다.','ADMIN_REQUIRED')}
