@@ -25,6 +25,7 @@ function pdfFromJpegs(pages){
 
 function pdfCardText(item,type){
  if(type==='emboss')return {title:item.PlateName||'-',sub:item.Company||'',extra:'',image:item.ImageURL};
+ if(type==='site'){const dates=[item.MHOpenDate&&'MH '+item.MHOpenDate,item.CompletionDate&&'완공 '+item.CompletionDate].filter(Boolean).join(' · ');return {title:item.SiteName||item.Company||'-',sub:[siteTypeLabel(item),siteCategoryValue(item)].filter(Boolean).join(' · '),extra:dates,image:item.ImageURL}}
  const prev=String(item.PreviousNames||'').trim();   // 종이 넘버는 PC 인쇄본처럼 넣지 않는다
  return {title:lpmExportName(item),sub:[lpmBookLabel(item),item.Category].filter(Boolean).join(' · '),extra:prev?'이전: '+prev:'',image:item.ImageURL};
 }
@@ -54,7 +55,7 @@ async function renderPdfPage(rows,type,pageNo,pages,total,logo,font){
  const left=10*mm,top=10*mm,inner=190*mm;
  if(logo)x.drawImage(logo,left,top,32*mm,4.2*mm);
  x.fillStyle='#151515';x.textBaseline='middle';x.font='700 '+pt(18)+'px '+font;
- x.fillText(type==='emboss'?'경면판':'LPM 샘플',left+(logo?37*mm:0),top+2.1*mm);
+ x.fillText(catalogHeading(type),left+(logo?37*mm:0),top+2.1*mm);
  const gridTop=top+9.2*mm,gap=3*mm,cw=(inner-3*gap)/4,ch=58*mm;
  rows.forEach((item,i)=>{
   const t=pdfCardText(item,type),cx=left+(i%4)*(cw+gap),cy=gridTop+Math.floor(i/4)*(ch+gap),img=images[i];
@@ -70,7 +71,7 @@ async function renderPdfPage(rows,type,pageNo,pages,total,logo,font){
  });
  images.forEach(img=>img&&img.close&&img.close());
  x.fillStyle='#666';x.font=pt(8)+'px '+font;x.textAlign='right';x.textBaseline='alphabetic';
- x.fillText((type==='emboss'?'HYOSAN 경면판':'HYOSAN LPM')+' · '+total+'개 · '+(pageNo+1)+' / '+pages,left+inner,gridTop+4*ch+3*gap+4*mm+pt(8));
+ x.fillText('HYOSAN '+catalogFooterLabel(type)+' · '+total+'개 · '+(pageNo+1)+' / '+pages,left+inner,gridTop+4*ch+3*gap+4*mm+pt(8));
  const blob=await new Promise(resolve=>c.toBlob(resolve,'image/jpeg',.88));c.width=c.height=0;
  if(!blob)throw new Error('페이지 이미지를 만들 수 없습니다.');
  return {bytes:new Uint8Array(await blob.arrayBuffer()),w:W,h:H};
@@ -85,7 +86,7 @@ async function downloadCatalogPdf(rows,type){
   actionStatus('PDF 만드는 중… '+(p+1)+' / '+pages+'쪽');
   out.push(await renderPdfPage(rows.slice(p*PDF_PAGE_SIZE,(p+1)*PDF_PAGE_SIZE),type,p,pages,rows.length,logo,font));
  }
- const d=new Date(),name='HYOSAN-'+(type==='emboss'?'EMBOSS':'LPM')+'-'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'.pdf';
+ const d=new Date(),name='HYOSAN-'+(type==='emboss'?'EMBOSS':type==='site'?'SITE':'LPM')+'-'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'.pdf';
  const url=URL.createObjectURL(pdfFromJpegs(out)),a=document.createElement('a');
  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),120000);
  return 'PDF를 저장했습니다: '+name+' ('+rows.length+'개 · '+pages+'쪽)';

@@ -19,7 +19,7 @@ body.orders-mode main>.top{display:none}
 .ob-foot.ob-stale{color:#ffe08a}
 .ob-foot.ob-err{color:#ffc4c4}
 /* 탭 이름이 잘리지 않도록: 화면이 아니라 현황판 영역 너비 기준으로 글자 크기·줄바꿈 */
-.ob-root{container-type:inline-size}
+.ob-root{container-type:inline-size;isolation:isolate}   /* 현황판 안 겹침 순서(z-index)가 하단 메뉴 위로 새지 않게 가둔다 */
 @container (max-width:1500px){.ob-opt{font-size:14px}}
 @container (max-width:1250px){.ob-opt{font-size:13px;padding:0 2px}}
 @container (max-width:1060px){
