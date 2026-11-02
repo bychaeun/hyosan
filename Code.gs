@@ -26,6 +26,7 @@ function doPost(e){
     }
     if(body.action==='orderBoardPush')return jsonOutput(orderBoardPush_(body));     // 사무실 PC 자동 전송 (OrderBoard.gs)
     if(body.action==='orderBoardStatus')return jsonOutput(orderBoardStatus_(body));
+    if(body.action==='newPapersPush')return jsonOutput(newPapersPush_(body));     // 7일마다 ERP 신규 종이 → '신규 종이(ERP)' 시트
     const user=authenticateRequest_(body,cfg),blocked=maintenanceBlock_(user,cfg);
     if(blocked)return jsonOutput(blocked);
     if(body.action==='sessionStatus')return jsonOutput(renewSessionResponse_(body,user,userResponse_(user)));

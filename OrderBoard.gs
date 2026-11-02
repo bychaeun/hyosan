@@ -21,6 +21,7 @@ function orderBoardStatus_(body){
   orderBoardCheckKey_(body);
   const meta=orderBoardMeta_(),res={ok:true,updatedAt:meta?meta.updatedAt:null};
   if(body.papers===true)res.papers=stockPapers_();
+  res.newPapersDue=newPapersDue_();   // 7일이 지났으면 PC가 신규 종이 목록도 보낸다
   return res;
 }
 
@@ -169,4 +170,54 @@ function orderBoardSafeEqual_(a,b){
   if(a.length!==b.length)return false;
   let diff=0;for(let i=0;i<a.length;i++)diff|=a.charCodeAt(i)^b.charCodeAt(i);
   return diff===0;
+}
+
+/* ───── 신규 종이(ERP): 사무실 PC가 7일마다(상태 응답의 newPapersDue) 최근 2년 입고 종이 중 HYOSAN_LPM에 없는 것을 보낸다 ─────
+   papers:[{paper,company,first,last,lots,color}] → 'HYOSAN_LPM'과 같은 열의 '신규 종이(ERP)' 시트 맨 아래에 비활성으로 덧붙인다.
+   사람이 HYOSAN_LPM으로 옮긴 뒤 지운 행·그냥 지운 행은 다시 넣지 않는다(한 번 넣은 종이넘버는 숨김 시트 NEW_PAPERS_SEEN에 기록).
+   이미 HYOSAN_LPM에 들어간 종이는 이 시트에서 지운다. LPM_ID는 비워 두면 매시간 동기화가 붙인다. */
+const NEW_PAPER_SHEET='신규 종이(ERP)',NEW_PAPER_SEEN='NEW_PAPERS_SEEN',NEW_PAPER_DAYS=7;
+function newPapersDue_(){return Date.now()-Number(PropertiesService.getScriptProperties().getProperty('NEW_PAPERS_AT')||0)>NEW_PAPER_DAYS*864e5}
+function newPapersPush_(body){
+  orderBoardCheckKey_(body);
+  if(!Array.isArray(body.papers))throw appError_('신규 종이 데이터 형식이 올바르지 않습니다.','NEW_PAPERS_INVALID');
+  const lock=LockService.getScriptLock();lock.waitLock(20000);
+  try{
+    const ss=SpreadsheetApp.openById(SPREADSHEET_ID),lpm=ss.getSheetByName(SHEET_NAMES.lpm),width=lpm.getLastColumn(),head=lpm.getRange(1,1,1,width).getDisplayValues()[0],col=name=>head.indexOf(name);
+    if(col('PaperNumber')<0||col('Active')<0)throw appError_('HYOSAN_LPM 열 구조를 찾지 못했습니다.','NEW_PAPERS_HEADER');
+    const present=new Set();
+    lpm.getRange(2,col('PaperNumber')+1,Math.max(1,lpm.getLastRow()-1),1).getDisplayValues().forEach(r=>String(r[0]).split(/[\r\n,;|]+/).forEach(v=>{const k=stockKey_(v);if(k)present.add(k)}));
+    let sh=ss.getSheetByName(NEW_PAPER_SHEET);
+    if(!sh){   // 처음: HYOSAN_LPM 머리글·열 너비·첫 행 서식 그대로
+      sh=ss.insertSheet(NEW_PAPER_SHEET);
+      lpm.getRange(1,1,1,width).copyTo(sh.getRange(1,1,1,width));
+      for(let c=1;c<=width;c++)sh.setColumnWidth(c,lpm.getColumnWidth(c));
+      sh.setFrozenRows(1);
+    }
+    // 이미 HYOSAN_LPM에 들어간 행은 지운다(아래에서부터)
+    const pc=col('PaperNumber')+1,last=sh.getLastRow();let removed=0;const inTab=new Set();
+    const tabKeys=last>1?sh.getRange(2,pc,last-1,1).getDisplayValues().map(r=>stockKey_(r[0])):[];
+    for(let i=tabKeys.length-1;i>=0;i--){const k=tabKeys[i];if(!k)continue;if(present.has(k)){sh.deleteRow(i+2);removed++}else inTab.add(k)}
+    let seenSh=ss.getSheetByName(NEW_PAPER_SEEN);if(!seenSh){seenSh=ss.insertSheet(NEW_PAPER_SEEN);seenSh.hideSheet()}
+    const seen=new Set(seenSh.getLastRow()?seenSh.getRange(1,1,seenSh.getLastRow(),1).getDisplayValues().map(r=>r[0]):[]);
+    const rows=[],keys=[];
+    body.papers.forEach(p=>{
+      const k=stockKey_(p&&p.paper);if(!k||present.has(k)||inTab.has(k)||seen.has(k)||keys.includes(k))return;
+      const r=Array(width).fill(''),set=(name,v)=>{const i=col(name);if(i>=0)r[i]=v};
+      set('PaperNumber',String(p.paper).trim());set('BasePaperCompany',String(p.company||''));
+      if(/^#[0-9A-F]{6}$/i.test(String(p.color||'')))set('ColorHex',String(p.color).toUpperCase());
+      set('Active',false);if(col('ManualManaged')>=0)set('ManualManaged',false);
+      set('인덱스 변경 내용','ERP 신규: 첫 입고 '+(p.first||'?')+' · 최근 입고 '+(p.last||'?')+' · '+(Number(p.lots)||0)+'회');
+      rows.push(r);keys.push(k);
+    });
+    if(rows.length){
+      const start=sh.getLastRow()+1,target=sh.getRange(start,1,rows.length,width);
+      const sample=lpm.getRange(2,1,1,width);   // HYOSAN_LPM 첫 데이터 행의 서식·체크박스 그대로
+      sample.copyTo(target,SpreadsheetApp.CopyPasteType.PASTE_FORMAT,false);sample.copyTo(target,SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION,false);
+      target.setValues(rows);
+      seenSh.getRange(seenSh.getLastRow()+1,1,keys.length,1).setNumberFormat('@').setValues(keys.map(k=>[k]));
+    }
+    PropertiesService.getScriptProperties().setProperty('NEW_PAPERS_AT',String(Date.now()));
+    return {ok:true,received:body.papers.length,added:rows.length,removed};
+  }finally{lock.releaseLock()}
 }

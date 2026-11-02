@@ -34,3 +34,8 @@ test('ERP folder images are tagged crop=erp and always listed after regular phot
  // rows with only regular photos are left untouched
  const plain=row();assert.equal(c.planIndexSync_([plain],[src()],[erp('OTHER','x')]).updates.filter(u=>u.col===11).length,0);
 });
+test('rows pasted with a blank LPM_ID get the next free ID once',()=>{
+ const a=row(),b=row('NEW-1','');a[0]='LPM-120';b[0]='';
+ const ids=c.planIndexSync_([a,b],[],[]).updates.filter(u=>u.col===1);assert.equal(ids.length,1);assert.equal(ids[0].row,3);assert.equal(ids[0].value,'LPM-121');
+ b[0]=ids[0].value;assert.equal(c.planIndexSync_([a,b],[],[]).updates.filter(u=>u.col===1).length,0);
+});

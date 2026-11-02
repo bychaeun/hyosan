@@ -40,7 +40,7 @@ function runIndexSync_(dryRun){
 }
 // Batch contiguous changes per column. Existing names, categories and images are not rewritten.
 function writeIndexUpdates_(sheet,updates){
-  [11,13].forEach(col=>{
+  [1,11,13].forEach(col=>{
     const list=updates.filter(u=>u.col===col).sort((a,b)=>a.row-b.row);let start=0,values=[];
     const flush=()=>{if(values.length)sheet.getRange(start,col,values.length,1).setNumberFormat('@').setValues(values).setWrap(true);values=[]};
     list.forEach(u=>{if(values.length&&u.row!==start+values.length)flush();if(!values.length)start=u.row;values.push([literalIndexText_(u.value)])});flush();
@@ -102,8 +102,11 @@ function planIndexSync_(rows,sources,images,manualColumn=-1){
     uniqueIndex_(names).forEach(n=>{const k=indexNorm_(n),candidates=imageMap.get(k)||[];if(!candidates.length||k===paper)return;const owners=namePapers.get(k);if(owners&&owners.size===1&&owners.has(paper))matches.push(...candidates);else{ambiguousImages++;warning='이미지 확인: 파일명이 여러 종이넘버에 일치하여 자동 연결하지 않았습니다.'}});
     return {images:Array.from(new Map(matches.map(im=>[im.id,im])).values()),warning};
   };
+  let next=rows.reduce((max,r)=>Math.max(max,Number((String(r[0]||'').match(/(\d+)$/)||[])[1]||0)),0)+1;
   rows.forEach((r,i)=>{
     const paper=indexNorm_(r[7]),g=groups.get(paper),messages=[];
+    // '신규 종이(ERP)' 시트에서 옮겨 붙인 행처럼 LPM_ID가 빈 행에는 다음 번호를 붙인다
+    if(paper&&!String(r[0]||'').trim())updates.push({row:i+2,col:1,value:'LPM-'+String(next++).padStart(3,'0')});
     const manual=manualColumn>=0&&/^(true|1|yes|수동)$/i.test(String(r[manualColumn]||'').trim());
     if(g&&!manual){
       if(indexSet_(splitIndexNames_(r[1]))!==indexSet_(g.current))messages.push('제품명: 시트 ['+(r[1]||'없음')+'] / 인덱스 ['+g.current.join(', ')+']');
@@ -116,7 +119,6 @@ function planIndexSync_(rows,sources,images,manualColumn=-1){
     if(manual)return;
     const status=messages.join('\n');if(status!==String(r[12]||''))updates.push({row:i+2,col:13,value:status});
   });
-  let next=rows.reduce((max,r)=>Math.max(max,Number((String(r[0]||'').match(/(\d+)$/)||[])[1]||0)),0)+1;
   groups.forEach((g,paper)=>{if(present.has(paper))return;const image=imageFor(paper,g.current.concat(g.previous)),r=Array(13).fill('');r[0]='LPM-'+String(next++).padStart(3,'0');r[1]=g.current.join('\n');r[2]=g.previous.join('\n');r[7]=g.paper;r[8]=g.companies.join(', ');r[10]=mergeImageUrls_('',image.images,cropUrls);r[11]=false;r[12]=image.warning;additions.push(r);present.add(paper)});
   return {updates,additions,duplicatePapers:Array.from(groups.values()).filter(g=>g.count>1).length,ambiguousImages};
 }

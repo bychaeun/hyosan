@@ -1,12 +1,55 @@
 ﻿# 수주현황판 자동 전송 — 업체 ERP DB(읽기 전용)에서 원본 수주현황판 조회를 그대로 실행해 효산 웹앱으로 보낸다.
 # 작업 스케줄러가 10분마다 실행. 계정·전송 키는 %APPDATA%\hyosan-board 에 이 PC·이 윈도우 계정 전용으로 암호화 저장.
-param([switch]$DryRun, [string]$OutFile, [string[]]$Papers, [switch]$Force)   # -Papers: 시험 실행 때 재고 조회할 종이 넘버를 직접 지정 · -Force: 다른 PC가 방금 보냈어도 지금 보냄
+param([switch]$DryRun, [string]$OutFile, [string[]]$Papers, [switch]$Force, [switch]$NewPapers, [string]$ScanDir = 'E:\모양지이미지')   # -Papers: 시험 실행 때 재고 조회할 종이 넘버를 직접 지정 · -Force: 다른 PC가 방금 보냈어도 지금 보냄 · -NewPapers: 시험 실행 때 신규 종이도 조회 · -ScanDir: 종이 스캔 사진 폴더(대표 색)
 $ErrorActionPreference = 'Stop'
 $home_ = Join-Path $env:APPDATA 'hyosan-board'
 $log = Join-Path $home_ 'sync.log'
 $apiUrl = 'https://script.google.com/macros/s/AKfycbyiUawKvrT80mA7ClIg-WsBAKDg88sBwct8uasyn2R2o6ixLaM69eLEviyexyMTK_hv/exec'
 function Log($msg) { $line = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' ' + $msg; Add-Content -Path $log -Value $line -Encoding UTF8; Write-Output $line }
 function Unprotect($s) { (New-Object System.Net.NetworkCredential('', ($s | ConvertTo-SecureString))).Password }
+# 스캔 사진의 대표 색: 80x80으로 줄여 k-평균(5묶음) 중 가장 넓은 색. 같은 파일(수정 시각 동일)은 scan-colors.json에 저장해 다시 계산하지 않는다.
+$scanColors = $null; $scanColorsDirty = $false; $scanColorsFile = Join-Path $home_ 'scan-colors.json'
+function ScanColor($path) {
+  if ($script:scanColors -eq $null) {
+    $script:scanColors = @{}
+    if (Test-Path $scanColorsFile) { (Get-Content $scanColorsFile -Raw -Encoding UTF8 | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $script:scanColors[$_.Name] = $_.Value } }
+    Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
+using System; using System.Drawing; using System.Drawing.Drawing2D; using System.Collections.Generic; using System.Linq;
+public static class ScanDominant {
+  public static string Hex(string path){
+    const int S=80,K=5; var px=new List<double[]>();
+    using(var src=new Bitmap(path)) using(var bm=new Bitmap(S,S)){
+      using(var g=Graphics.FromImage(bm)){g.InterpolationMode=InterpolationMode.HighQualityBilinear;g.DrawImage(src,0,0,S,S);}
+      for(int y=0;y<S;y++)for(int x=0;x<S;x++){var c=bm.GetPixel(x,y);px.Add(new double[]{c.R,c.G,c.B});}
+    }
+    var sorted=px.OrderBy(p=>p[0]*0.299+p[1]*0.587+p[2]*0.114).ToList();
+    var cen=new double[K][];for(int k=0;k<K;k++)cen[k]=(double[])sorted[(int)((k+0.5)*sorted.Count/K)].Clone();
+    var lab=new int[px.Count];
+    for(int it=0;it<15;it++){
+      var sum=new double[K,3];var cnt=new int[K];
+      for(int i=0;i<px.Count;i++){int best=0;double bd=double.MaxValue;for(int k=0;k<K;k++){double d=0;for(int j=0;j<3;j++){double t=px[i][j]-cen[k][j];d+=t*t;}if(d<bd){bd=d;best=k;}}lab[i]=best;cnt[best]++;for(int j=0;j<3;j++)sum[best,j]+=px[i][j];}
+      for(int k=0;k<K;k++)if(cnt[k]>0)for(int j=0;j<3;j++)cen[k][j]=sum[k,j]/cnt[k];
+    }
+    var counts=new int[K];foreach(var l in lab)counts[l]++;
+    var groups=new List<double[]>();   // 거의 같은 색 묶음(거리 18 미만)은 합친다
+    foreach(var k in Enumerable.Range(0,K).OrderByDescending(k=>counts[k])){
+      if(counts[k]==0)continue;
+      var hit=groups.FirstOrDefault(gp=>Math.Sqrt(Math.Pow(gp[0]-cen[k][0],2)+Math.Pow(gp[1]-cen[k][1],2)+Math.Pow(gp[2]-cen[k][2],2))<18);
+      if(hit!=null){double n=hit[3]+counts[k];for(int j=0;j<3;j++)hit[j]=(hit[j]*hit[3]+cen[k][j]*counts[k])/n;hit[3]=n;}
+      else groups.Add(new double[]{cen[k][0],cen[k][1],cen[k][2],counts[k]});
+    }
+    var top=groups.OrderByDescending(gp=>gp[3]).First();
+    return string.Format("#{0:X2}{1:X2}{2:X2}",(int)Math.Round(top[0]),(int)Math.Round(top[1]),(int)Math.Round(top[2]));
+  }
+}
+'@
+  }
+  $key = $path + '|' + (Get-Item -LiteralPath $path).LastWriteTimeUtc.Ticks
+  if (-not $script:scanColors.ContainsKey($key)) {
+    try { $script:scanColors[$key] = [ScanDominant]::Hex($path); $script:scanColorsDirty = $true } catch { return '' }
+  }
+  $script:scanColors[$key]
+}
 
 try {
   if ((Test-Path $log) -and (Get-Item $log).Length -gt 512KB) { Move-Item $log "$log.old" -Force }
@@ -110,6 +153,29 @@ try {
       if ($paperSet.ContainsKey($k)) { if (-not $stockLpm.Contains($k)) { $stockLpm[$k] = New-Object System.Collections.ArrayList }; [void]$stockLpm[$k].Add([ordered]@{ s = $_.spec; t = $_.standard; q = $_.qnty }) } }
   }
   $stock = [ordered]@{ papers = $stockPapers; lpm = $stockLpm }
+
+  # 신규 종이(웹앱이 7일마다 newPapersDue로 알려줌): 최근 2년 입고된 종이 중 시트에 없는 것. 부자재(오버레이·크라프트·백페이퍼)는 뺀다.
+  #  원지회사: 그 종이를 가장 많이 입고한 거래처(효산 자체 이동분 제외) · 색상: 스캔 폴더에 같은 이름 사진이 있으면 대표 색
+  $paperCands = $null
+  if ($paperSet.Count -and ($status.newPapersDue -or ($DryRun -and $NewPapers))) { try {   # 실패해도 수주현황판·재고 전송은 그대로 진행
+    $paperCands = New-Object System.Collections.ArrayList
+    $scan = @{}
+    if (Test-Path -LiteralPath $ScanDir) { Get-ChildItem -LiteralPath $ScanDir -File | Where-Object { $_.Extension -match '^\.jpe?g$' } | ForEach-Object { $scan[(PaperKey $_.BaseName)] = $_.FullName } }
+    Rows ("WITH ins AS (SELECT pattern_code, incomp_code, in_date AS d FROM dbo.tb_patternin WITH (NOLOCK) WHERE deleted=0" +
+      " UNION ALL SELECT pattern_code, incomp_code, CAST(in_time AS date) FROM dbo.tb_patternstock WITH (NOLOCK))," +
+      " recent AS (SELECT pattern_code, MIN(d) AS first_in, MAX(d) AS last_in, COUNT(*) AS lots FROM ins WHERE d>=DATEADD(year,-2,GETDATE()) GROUP BY pattern_code)," +
+      " co AS (SELECT i.pattern_code, c.customer, ROW_NUMBER() OVER (PARTITION BY i.pattern_code ORDER BY COUNT(*) DESC, MAX(i.d) DESC) AS rk" +
+      "  FROM ins i JOIN dbo.tb_customer c WITH (NOLOCK) ON c.cust_code=i.incomp_code WHERE c.customer NOT LIKE N'%효산%' GROUP BY i.pattern_code, c.customer)" +
+      " SELECT p.pattern, ISNULL(co.customer,'') AS company, CONVERT(char(10),r.first_in,120) AS first_in, CONVERT(char(10),r.last_in,120) AS last_in, r.lots" +
+      " FROM recent r JOIN dbo.tb_pattern p WITH (NOLOCK) ON p.pattern_code=r.pattern_code AND ISNULL(p.deleted,0)=0" +
+      " LEFT JOIN co ON co.pattern_code=r.pattern_code AND co.rk=1 ORDER BY r.first_in") | ForEach-Object {
+      $k = PaperKey $_.pattern
+      if (-not $k -or $paperSet.ContainsKey($k) -or $_.pattern -match 'O/L|OVERLAY|KRAFT|BACK\s*PAPER|BACK$') { return }
+      $img = $scan[$k]; if (-not $img) { $img = $scan[($k -replace '/', '')] }
+      [void]$paperCands.Add([ordered]@{ paper = $_.pattern; company = $_.company; first = $_.first_in; last = $_.last_in; lots = $_.lots; color = $(if ($img) { ScanColor $img } else { '' }) })
+    }
+    if ($scanColorsDirty) { [IO.File]::WriteAllText($scanColorsFile, ($scanColors | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding($false))) }
+  } catch { $paperCands = $null; Log ("신규 종이 조회 실패(다음 실행 때 다시 시도): " + $_.Exception.Message) } }
   $cn.Close()
 
   $generatedAt = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss') + '+09:00'
@@ -119,7 +185,8 @@ try {
 
   if ($DryRun) {
     $target = if ($OutFile) { $OutFile } else { Join-Path $home_ 'board-preview.json' }
-    [IO.File]::WriteAllText($target, (([ordered]@{ generatedAt = $generatedAt; board = $board; stock = $stock }) | ConvertTo-Json -Depth 7 -Compress), (New-Object Text.UTF8Encoding($false)))
+    [IO.File]::WriteAllText($target, (([ordered]@{ generatedAt = $generatedAt; board = $board; stock = $stock; newPapers = $paperCands }) | ConvertTo-Json -Depth 7 -Compress), (New-Object Text.UTF8Encoding($false)))
+    if ($paperCands -ne $null) { $summary += " · 신규 종이 후보 $($paperCands.Count)" }
     Log "시험 실행 완료(전송 안 함): $summary -> $target"
     exit 0
   }
@@ -129,6 +196,13 @@ try {
   $res = Api $payload
   if ($res.ok -ne $true) { throw "웹앱 응답 오류: $($res.error)" }
   Log ("전송 완료: $summary" + $(if ($res.skipped) { ' (다른 PC가 더 최신 데이터를 이미 보냄)' } elseif ($res.unchanged) { ' (내용 변화 없음)' } else { '' }))
+  if ($paperCands -ne $null) {
+    try {
+      $np = Api ([ordered]@{ action = 'newPapersPush'; secret = $pushKey; papers = @($paperCands) })
+      if ($np.ok -ne $true) { throw $np.error }
+      Log "신규 종이: 후보 $($np.received) · 시트에 추가 $($np.added) · 이미 옮겨져 지움 $($np.removed)"
+    } catch { Log ("신규 종이 전송 실패(다음 실행 때 다시 시도): " + $_.Exception.Message) }
+  }
 } catch {
   Log ("실패: " + $_.Exception.Message)
   exit 1
