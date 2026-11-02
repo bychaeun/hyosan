@@ -24,3 +24,13 @@ test('hourly schedule and contiguous batched writes',()=>{
  const calls=[];c.ScriptApp={getProjectTriggers:()=>[],newTrigger:()=>({timeBased(){return this},everyHours(n){calls.push(n);return this},create(){}})};c.installIndexSyncTrigger();assert.deepEqual(calls,[1]);
  const writes=[];c.writeIndexUpdates_({getRange:(row,col,n)=>({setNumberFormat(){return this},setValues(values){writes.push({row,col,n,values});return this},setWrap(){return this}})},[{row:2,col:11,value:'one'},{row:3,col:11,value:'two'},{row:8,col:13,value:'note'}]);assert.equal(writes.length,2);assert.equal(writes[0].n,2);
 });
+test('ERP folder images are tagged crop=erp and always listed after regular photos',()=>{
+ const erp=(key,id)=>({key,id,crop:true,url:'https://drive.google.com/thumbnail?id='+id+'&sz=w1600&crop=erp'});
+ // ERP image linked earlier without the tag, then a regular photo arrives later
+ const r=row('CR120-W-11','N916','https://drive.google.com/thumbnail?id=scan&sz=w1600');
+ const p=c.planIndexSync_([r],[src()],[erp('CR120-W-11','scan'),image('CR120-W-11_01','photo')]),urls=p.updates.find(u=>u.col===11).value.split('\n');
+ assert.deepEqual(urls,['https://drive.google.com/thumbnail?id=photo&sz=w1600','https://drive.google.com/thumbnail?id=scan&sz=w1600&crop=erp']);
+ r[10]=urls.join('\n');assert.equal(c.planIndexSync_([r],[src()],[erp('CR120-W-11','scan'),image('CR120-W-11_01','photo')]).updates.filter(u=>u.col===11).length,0);
+ // rows with only regular photos are left untouched
+ const plain=row();assert.equal(c.planIndexSync_([plain],[src()],[erp('OTHER','x')]).updates.filter(u=>u.col===11).length,0);
+});

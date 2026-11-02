@@ -14,7 +14,8 @@ function recoverDriveImage(img){
  const requested=Number((url.searchParams.get('sz')||url.pathname).match(/w(\d+)/)?.[1])||1600;
  const size=entry.attempt===0?Math.min(requested,1600):Math.min(requested,800);
  entry.attempt++;
- const next='https://lh3.googleusercontent.com/d/'+encodeURIComponent(id)+'=w'+size+(revision?'?rev='+encodeURIComponent(revision):'');
+ const base=typeof driveImageSource==='function'?driveImageSource(id,size):'https://lh3.googleusercontent.com/d/'+encodeURIComponent(id)+'=w'+size;   // ERP 스캔은 잘린 주소 유지
+ const next=base+(revision?'?rev='+encodeURIComponent(revision):'');
  entry.last=next;imageRecoveryState.set(img,entry);
  img.src=next;
 }

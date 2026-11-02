@@ -43,7 +43,7 @@ function shareImageBlob(blob,name,key){
  return shareImageFile(file);
 }
 async function fetchShareImage(url,maxSize){
- const driveId=driveFileId(url),source=driveId?'https://lh3.googleusercontent.com/d/'+encodeURIComponent(driveId)+'=w'+maxSize:url;
+ const driveId=driveFileId(url),source=driveId?driveImageSource(driveId,maxSize):url;
  const response=await fetch(source,{mode:'cors',credentials:'omit',signal:AbortSignal.timeout(30000)});
  if(!response.ok)throw new Error('이미지를 불러올 수 없습니다 ('+response.status+').');
  return response.blob();

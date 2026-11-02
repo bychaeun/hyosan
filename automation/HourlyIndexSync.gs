@@ -1,7 +1,7 @@
 // Standalone HYOSAN INDEX SYNC project. Do not add this file to the web API project.
 const SPREADSHEET_ID='1RC-6ibPA86zaWOGt1rzgmQf9tLpT4OcgdI6K9XcUPTI';
-const LPM_SHEET='HYOSAN_LPM',INDEX_FOLDER='1q_c5qhZr8GpOqVf2MK11v9hwlmoHNFuU',IMAGE_FOLDERS=['17nAS6IOCC5tkl_L0NOYqdltnbRZmyZBb','1Wn6eedmpG3dvLx9EtLCCutWZS1WVkx8t'];
-const SYNC_VERSION='2026-11-02-multi-image-folder-v4';
+const LPM_SHEET='HYOSAN_LPM',INDEX_FOLDER='1q_c5qhZr8GpOqVf2MK11v9hwlmoHNFuU',ERP_IMAGE_FOLDER='1Wn6eedmpG3dvLx9EtLCCutWZS1WVkx8t',IMAGE_FOLDERS=['17nAS6IOCC5tkl_L0NOYqdltnbRZmyZBb',ERP_IMAGE_FOLDER];
+const SYNC_VERSION='2026-11-02-erp-image-last-v5';
 function syncIndexCode(){return runIndexSync_(false)}
 function previewIndexSync(){return runIndexSync_(true)}
 function installIndexSyncTrigger(){
@@ -63,7 +63,9 @@ function readIndexImages_(){
   const out=[];
   // An unreadable folder is skipped; sync only adds URLs, so nothing is lost.
   IMAGE_FOLDERS.forEach(id=>{let files;try{files=DriveApp.getFolderById(id).getFiles()}catch(e){console.warn('이미지 폴더 읽기 실패: '+id);return}
-  while(files.hasNext()){const f=files.next();if(!/^image\//.test(f.getMimeType()))continue;const name=f.getName().replace(/\.(jpe?g|png|webp|gif|bmp|tiff?|avif|heic|heif|svg)$/i,'');out.push({key:indexNorm_(name),id:f.getId(),url:'https://drive.google.com/thumbnail?id='+encodeURIComponent(f.getId())+'&sz=w1600'})}});
+  while(files.hasNext()){const f=files.next();if(!/^image\//.test(f.getMimeType()))continue;const name=f.getName().replace(/\.(jpe?g|png|webp|gif|bmp|tiff?|avif|heic|heif|svg)$/i,''),crop=id===ERP_IMAGE_FOLDER;
+    // ERP scans carry crop=erp so the web app hides the printed paper number at the bottom.
+    out.push({key:indexNorm_(name),id:f.getId(),crop,url:'https://drive.google.com/thumbnail?id='+encodeURIComponent(f.getId())+'&sz=w1600'+(crop?'&crop=erp':'')})}});
   return out.sort((a,b)=>a.key.localeCompare(b.key,undefined,{numeric:true})||a.id.localeCompare(b.id));
 }
 function validateIndexHeaders_(h){
@@ -72,16 +74,21 @@ function validateIndexHeaders_(h){
   if(h[12]&&!['인덱스 변경 내용','자동화 상태'].includes(h[12]))throw new Error('M열에 다른 용도의 제목이 있어 중단합니다.');
 }
 function driveImageId_(url){try{const s=String(url);if(!/^https:\/\/(?:drive\.google\.com|drive\.usercontent\.google\.com|lh3\.googleusercontent\.com)\//i.test(s))return '';const m=s.match(/\/(?:file\/d|d)\/([^/?#]+)/)||s.match(/[?&]id=([^&#]+)/);return m?decodeURIComponent(m[1]):''}catch(e){return ''}}
-function mergeImageUrls_(existing,images){
-  const urls=String(existing||'').split(/[\r\n,;|]+/).map(v=>v.trim()).filter(Boolean),seen=new Set(urls.map(v=>driveImageId_(v)||v));
-  images.forEach(im=>{const key=im.id||driveImageId_(im.url)||im.url;if(!seen.has(key)){urls.push(im.url);seen.add(key)}});return urls.join('\n');
+const isErpImageUrl_=url=>/[?&]crop=erp(?:&|#|$)/.test(String(url));
+// ERP scans always go after regular photos; ERP files linked before tagging get the crop tag.
+function mergeImageUrls_(existing,images,cropUrls){
+  cropUrls=cropUrls||new Map(images.filter(im=>im.crop).map(im=>[im.id,im.url]));
+  const urls=String(existing||'').split(/[\r\n,;|]+/).map(v=>v.trim()).filter(Boolean).map(v=>cropUrls.get(driveImageId_(v))||v),seen=new Set(urls.map(v=>driveImageId_(v)||v));
+  images.forEach(im=>{const key=im.id||driveImageId_(im.url)||im.url;if(!seen.has(key)){urls.push(im.url);seen.add(key)}});
+  return urls.filter(v=>!isErpImageUrl_(v)).concat(urls.filter(isErpImageUrl_)).join('\n');
 }
 function planIndexSync_(rows,sources,images,manualColumn=-1){
   const groups=new Map(),present=new Set(),updates=[],additions=[];let ambiguousImages=0;
   sources.forEach(s=>{const key=indexNorm_(s.paper);if(!key)return;if(!groups.has(key))groups.set(key,{paper:s.paper,current:[],previous:[],companies:[],count:0});const g=groups.get(key);g.count++;g.current.push(...splitIndexNames_(s.current));g.previous.push(...(s.previous||[]).flatMap(splitIndexNames_));if(s.company)g.companies.push(s.company)});
   groups.forEach(g=>{g.current=uniqueIndex_(g.current);g.previous=uniqueIndex_(g.previous).filter(p=>!g.current.some(n=>indexNorm_(n)===indexNorm_(p)));g.companies=uniqueIndex_(g.companies)});
   rows.forEach(r=>{const p=indexNorm_(r[7]);if(p)present.add(p)});
-  const namePapers=new Map(),imageMap=new Map();
+  const namePapers=new Map(),imageMap=new Map(),cropUrls=new Map(images.filter(im=>im.crop).map(im=>[im.id,im.url]));
+  const hasUntaggedErp=v=>String(v||'').split(/[\r\n,;|]+/).some(u=>cropUrls.has(driveImageId_(u.trim()))&&!isErpImageUrl_(u));
   const register=(name,paper)=>{const key=indexNorm_(name);if(!key||!paper)return;if(!namePapers.has(key))namePapers.set(key,new Set());namePapers.get(key).add(paper)};
   rows.forEach(r=>splitIndexNames_(r[1]).concat(splitIndexNames_(r[2])).forEach(n=>register(n,indexNorm_(r[7]))));
   groups.forEach((g,p)=>g.current.concat(g.previous).forEach(n=>register(n,p)));
@@ -105,11 +112,11 @@ function planIndexSync_(rows,sources,images,manualColumn=-1){
     }
     const image=imageFor(paper,splitIndexNames_(r[1]).concat(splitIndexNames_(r[2]),g?g.current.concat(g.previous):[]));
     if(image.warning)messages.push(image.warning);
-    if(image.images.length){const urls=mergeImageUrls_(r[10],image.images);if(urls!==String(r[10]||''))updates.push({row:i+2,col:11,value:urls})}
+    if(image.images.length||hasUntaggedErp(r[10])){const urls=mergeImageUrls_(r[10],image.images,cropUrls);if(urls!==String(r[10]||''))updates.push({row:i+2,col:11,value:urls})}
     if(manual)return;
     const status=messages.join('\n');if(status!==String(r[12]||''))updates.push({row:i+2,col:13,value:status});
   });
   let next=rows.reduce((max,r)=>Math.max(max,Number((String(r[0]||'').match(/(\d+)$/)||[])[1]||0)),0)+1;
-  groups.forEach((g,paper)=>{if(present.has(paper))return;const image=imageFor(paper,g.current.concat(g.previous)),r=Array(13).fill('');r[0]='LPM-'+String(next++).padStart(3,'0');r[1]=g.current.join('\n');r[2]=g.previous.join('\n');r[7]=g.paper;r[8]=g.companies.join(', ');r[10]=mergeImageUrls_('',image.images);r[11]=false;r[12]=image.warning;additions.push(r);present.add(paper)});
+  groups.forEach((g,paper)=>{if(present.has(paper))return;const image=imageFor(paper,g.current.concat(g.previous)),r=Array(13).fill('');r[0]='LPM-'+String(next++).padStart(3,'0');r[1]=g.current.join('\n');r[2]=g.previous.join('\n');r[7]=g.paper;r[8]=g.companies.join(', ');r[10]=mergeImageUrls_('',image.images,cropUrls);r[11]=false;r[12]=image.warning;additions.push(r);present.add(paper)});
   return {updates,additions,duplicatePapers:Array.from(groups.values()).filter(g=>g.count>1).length,ambiguousImages};
 }

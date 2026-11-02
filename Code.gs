@@ -378,9 +378,12 @@ function getLpmsForExport_(lpmIds){
 
 function lpmDisplayName_(item){return String(item.ProductName||'').trim()||String(item.PaperNumber||item.PaperNo||item.PatternForm||'').trim()||item.LPM_ID||'';}
 
+// ERP 스캔 이미지(ERP image추가 폴더, 링크 공개) 표시. 일반 사진 뒤에 두고 아래 8%(종이넘버 글씨)를 잘라 쓴다
+const isErpImageUrl_=url=>/[?&]crop=erp(?:&|#|$)/.test(String(url||''));
 function exportImageUrls_(item){
   const values=[item.ImageURL,item.ImageURLs,item.ImageURL2,item.ImageURL3],seen={};
-  return values.flatMap(v=>String(v||'').split(/[\r\n,;|]+/)).map(v=>v.trim()).filter(v=>/^https?:\/\//i.test(v)&&!seen[v]&&(seen[v]=true));
+  return values.flatMap(v=>String(v||'').split(/[\r\n,;|]+/)).map(v=>v.trim()).filter(v=>/^https?:\/\//i.test(v)&&!seen[v]&&(seen[v]=true))
+    .sort((a,b)=>isErpImageUrl_(a)-isErpImageUrl_(b));
 }
 
 function exportToSlides_(lpmIds,requesterEmail,cfg,level){
@@ -462,9 +465,8 @@ function slidesFromRequests_(pres,requests){
 function exportImageBlobs_(items){
   const out=items.map(()=>null),auth={Authorization:'Bearer '+ScriptApp.getOAuthToken()},firsts=items.map(item=>exportImageUrls_(item)[0]||'');
   try{
-    const metaIdx=[],metaReq=[];
-    firsts.forEach((url,i)=>{const id=driveFileId_(url);if(id){metaIdx.push(i);metaReq.push({url:'https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?fields=thumbnailLink&supportsAllDrives=true',headers:auth,muteHttpExceptions:true})}});
-    const getIdx=[],getReq=[];
+    const metaIdx=[],metaReq=[],getIdx=[],getReq=[];
+    firsts.forEach((url,i)=>{const id=driveFileId_(url);if(id&&isErpImageUrl_(url)){getIdx.push(i);getReq.push({url:'https://lh3.googleusercontent.com/d/'+encodeURIComponent(id)+'=w1600-fcrop64=1,00000000ffffeb85',followRedirects:true,muteHttpExceptions:true})}else if(id){metaIdx.push(i);metaReq.push({url:'https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?fields=thumbnailLink&supportsAllDrives=true',headers:auth,muteHttpExceptions:true})}});
     (metaReq.length?UrlFetchApp.fetchAll(metaReq):[]).forEach((res,k)=>{
       if(res.getResponseCode()!==200)return;
       const link=JSON.parse(res.getContentText()).thumbnailLink;
