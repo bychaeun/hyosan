@@ -559,26 +559,30 @@ function applyComposerEffect(){const strength=state.composerStrength/100,base=$(
 /* 노멀맵 합성: 노멀맵(OpenGL, 초록=위)에 왼쪽 위에서 빛을 비춘 음영을 만들어 기존과 같은 soft-light·강도로 겹친다.
    평평한 곳은 회색(변화 없음), 빛을 받는 면은 밝게, 반대 면은 어둡게, 정면 반사는 하이라이트. 반전은 높낮이를 뒤집는다. */
 const NORMAL_LIGHT=(()=>{const v=[-1,1,1.5],l=Math.hypot(...v);return v.map(n=>n/l)})(),NORMAL_HALF=(()=>{const v=[NORMAL_LIGHT[0],NORMAL_LIGHT[1],NORMAL_LIGHT[2]+1],l=Math.hypot(...v);return v.map(n=>n/l)})();
-const normalImageRequests=new Map(),normalShadeCache=new Map();
+const NORMAL_TARGET=34,NORMAL_GAIN_MAX=8,normalImageRequests=new Map(),normalShadeCache=new Map();
 function embossNormalUrl(item){const raw=String(item&&item.NormalImageURL||'').split(/[\r\n,;|]+/).map(v=>v.trim()).find(v=>/^https?:\/\//i.test(v));return raw?composerImageUrl(raw):''}
 function loadNormalImage(url){if(!normalImageRequests.has(url))normalImageRequests.set(url,loadComposerExportImage(url,2048).catch(error=>{normalImageRequests.delete(url);throw error}));return normalImageRequests.get(url)}
 function normalShade(image,invert,maxSize){
  const scale=Math.min(1,maxSize/Math.max(image.naturalWidth,image.naturalHeight)),w=Math.max(1,Math.round(image.naturalWidth*scale)),h=Math.max(1,Math.round(image.naturalHeight*scale)),c=document.createElement('canvas');c.width=w;c.height=h;
  const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0,w,h);const data=ctx.getImageData(0,0,w,h),p=data.data,[lx,ly,lz]=NORMAL_LIGHT,[hx,hy,hz]=NORMAL_HALF,f=invert?-1/127.5:1/127.5,o=invert?-1:1,h2=hz*hz,h4=h2*h2,h8=h4*h4,h16=h8*h8,flatSpec=h16*h16*h16;
- // 화소마다 도는 부분: hypot·pow 대신 제곱근 한 번과 거듭제곱(48제곱=16제곱의 세제곱)으로 계산해 휴대폰에서도 빠르게. 결과는 같다(값 자르기·반올림은 Uint8ClampedArray가 한다)
- for(let i=0;i<p.length;i+=4){const nx=p[i]*f-o,ny=p[i+1]*f-o,nz=p[i+2]/127.5-1,inv=1/(Math.sqrt(nx*nx+ny*ny+nz*nz)||1),diffuse=(nx*lx+ny*ly+nz*lz)*inv-lz;let spec=(nx*hx+ny*hy+nz*hz)*inv;if(spec>0){spec*=spec;spec*=spec;spec*=spec;spec*=spec;spec=spec*spec*spec}else spec=0;p[i]=p[i+1]=p[i+2]=127.5+(diffuse*1.8+(spec-flatSpec)*.6)*255;p[i+3]=255}
+ // 화소마다 도는 부분: hypot·pow 대신 제곱근 한 번과 거듭제곱(48제곱=16제곱의 세제곱)으로 계산해 휴대폰에서도 빠르게
+ const shade=new Float32Array(p.length>>2);let sum=0;
+ for(let i=0,j=0;i<p.length;i+=4,j++){const nx=p[i]*f-o,ny=p[i+1]*f-o,nz=p[i+2]/127.5-1,inv=1/(Math.sqrt(nx*nx+ny*ny+nz*nz)||1),diffuse=(nx*lx+ny*ly+nz*lz)*inv-lz;let spec=(nx*hx+ny*hy+nz*hz)*inv;if(spec>0){spec*=spec;spec*=spec;spec*=spec;spec*=spec;spec=spec*spec*spec}else spec=0;const v=(diffuse*1.8+(spec-flatSpec)*.6)*255;shade[j]=v;sum+=Math.abs(v)}
+ // 노멀맵마다 굴곡 세기가 달라 그대로 쓰면 판에 따라 희미하게 보인다 → 평균 음영을 일정하게 맞춘다(약한 판은 최대 8배까지만 키움)
+ const gain=Math.max(1,Math.min(NORMAL_GAIN_MAX,NORMAL_TARGET/((sum/shade.length)||1)));
+ for(let i=0,j=0;i<p.length;i+=4,j++){p[i]=p[i+1]=p[i+2]=127.5+shade[j]*gain;p[i+3]=255}
  ctx.putImageData(data,0,0);return c;
 }
 async function updateComposerNormal(){
  const lpm=indexes.lpm.get(state.composerLpmId),emboss=indexes.emboss.get(state.composerEmbossId),url=lpm&&emboss?embossNormalUrl(emboss):'',canvas=$('#composerEmbossNormal'),shadow=$('#composerEmbossDark'),highlight=$('#composerEmbossLight');
  if(!url){canvas.hidden=true;canvas.dataset.key='';return}
- const key=url+'|'+state.composerInvert;if(canvas.dataset.key===key){if(canvas.dataset.ready){canvas.hidden=false;shadow.hidden=highlight.hidden=true}return}
- canvas.dataset.key=key;delete canvas.dataset.ready;canvas.hidden=true;   // 노멀맵을 받는 동안은 기존 방식으로 보여 준다
+ const key=url+'|'+state.composerInvert;if(canvas.dataset.key===key){if(canvas.dataset.ready)canvas.hidden=false;shadow.hidden=highlight.hidden=true;return}
+ canvas.dataset.key=key;delete canvas.dataset.ready;canvas.hidden=true;shadow.hidden=highlight.hidden=true;   // 받는 동안 기존 방식이 잠깐 보였다 바뀌지 않도록 숨긴다
  try{
   const image=await loadNormalImage(url);if(canvas.dataset.key!==key)return;
   let shade=normalShadeCache.get(key);if(!shade){shade=normalShade(image,state.composerInvert,1600);normalShadeCache.set(key,shade);if(normalShadeCache.size>4)normalShadeCache.delete(normalShadeCache.keys().next().value)}
   canvas.width=shade.width;canvas.height=shade.height;canvas.getContext('2d').drawImage(shade,0,0);canvas.dataset.ready='1';canvas.hidden=false;shadow.hidden=highlight.hidden=true;
- }catch(error){if(canvas.dataset.key===key){canvas.dataset.key='';canvas.hidden=true}}   // 노멀맵을 못 불러오면 기존 방식 그대로
+ }catch(error){if(canvas.dataset.key===key){canvas.dataset.key='';canvas.hidden=true;shadow.hidden=highlight.hidden=false}}   // 노멀맵을 못 불러오면 기존 방식 그대로
 }
 function setImageSource(img,src){if(img.dataset.src===src)return false;img.dataset.src=src;img.src=src;return true}
 function renderComposer(){
@@ -592,7 +596,7 @@ function renderComposer(){
   const syncResolution=()=>{if(lpmId===state.composerLpmId&&embossId===state.composerEmbossId)applyComposerResolution(base,shadow,preview,emboss)};
   base.onload=syncResolution;setImageSource(base,source);if(base.complete)syncResolution();
   if(ready){const plateSource=composerImageUrl(composerImage(emboss,'emboss'));setImageSource(shadow,plateSource);setImageSource(highlight,plateSource)}
-  $('#composerCaption').textContent=ready?composerLabel(lpm,'lpm')+' + '+composerLabel(emboss,'emboss')+(embossNormalUrl(emboss)?' · 노멀맵':''):composerLabel(lpm||emboss,lpm?'lpm':'emboss')+(lpm?' · 경면 적용 전':' · LPM 선택 전');
+  $('#composerCaption').textContent=ready?composerLabel(lpm,'lpm')+' + '+composerLabel(emboss,'emboss'):composerLabel(lpm||emboss,lpm?'lpm':'emboss')+(lpm?' · 경면 적용 전':' · LPM 선택 전');
  }else{preview.style.aspectRatio='1';preview.style.removeProperty('width');preview.style.removeProperty('height');preview.style.removeProperty('justify-self');preview.style.setProperty('--composer-ratio','1');preview.style.setProperty('--composer-base-w','100%');preview.style.setProperty('--composer-base-h','100%');$('#composerCaption').textContent='선택 대기 중'}
  applyComposerEffect();applyComposerZoom();renderComposerCandidates()
 }
