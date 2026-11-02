@@ -1,7 +1,7 @@
 // Standalone HYOSAN INDEX SYNC project. Do not add this file to the web API project.
 const SPREADSHEET_ID='1RC-6ibPA86zaWOGt1rzgmQf9tLpT4OcgdI6K9XcUPTI';
-const LPM_SHEET='HYOSAN_LPM',INDEX_FOLDER='1q_c5qhZr8GpOqVf2MK11v9hwlmoHNFuU',IMAGE_FOLDER='17nAS6IOCC5tkl_L0NOYqdltnbRZmyZBb';
-const SYNC_VERSION='2026-10-26-manual-row-protection-v3';
+const LPM_SHEET='HYOSAN_LPM',INDEX_FOLDER='1q_c5qhZr8GpOqVf2MK11v9hwlmoHNFuU',IMAGE_FOLDERS=['17nAS6IOCC5tkl_L0NOYqdltnbRZmyZBb','1Wn6eedmpG3dvLx9EtLCCutWZS1WVkx8t'];
+const SYNC_VERSION='2026-11-02-multi-image-folder-v4';
 function syncIndexCode(){return runIndexSync_(false)}
 function previewIndexSync(){return runIndexSync_(true)}
 function installIndexSyncTrigger(){
@@ -60,8 +60,10 @@ function parseIndexRows_(values){
   const out=[];for(let i=5;i<values.length;i++){const r=values[i]||[],names=r.slice(0,15).map(v=>String(v||'').trim()).filter(Boolean),paper=String(r[15]||'').trim();if(!paper||indexNorm_(paper)==='SPECOUT'||!names.length)continue;const current=names[names.length-1];out.push({paper,current,previous:uniqueIndex_(names.slice(0,-1).flatMap(splitIndexNames_)).filter(v=>!splitIndexNames_(current).some(n=>indexNorm_(n)===indexNorm_(v))),company:String(r[16]||'').trim()})}return out;
 }
 function readIndexImages_(){
-  const files=DriveApp.getFolderById(IMAGE_FOLDER).getFiles(),out=[];
-  while(files.hasNext()){const f=files.next();if(!/^image\//.test(f.getMimeType()))continue;const name=f.getName().replace(/\.(jpe?g|png|webp|gif|bmp|tiff?|avif|heic|heif|svg)$/i,'');out.push({key:indexNorm_(name),id:f.getId(),url:'https://drive.google.com/thumbnail?id='+encodeURIComponent(f.getId())+'&sz=w1600'})}
+  const out=[];
+  // An unreadable folder is skipped; sync only adds URLs, so nothing is lost.
+  IMAGE_FOLDERS.forEach(id=>{let files;try{files=DriveApp.getFolderById(id).getFiles()}catch(e){console.warn('이미지 폴더 읽기 실패: '+id);return}
+  while(files.hasNext()){const f=files.next();if(!/^image\//.test(f.getMimeType()))continue;const name=f.getName().replace(/\.(jpe?g|png|webp|gif|bmp|tiff?|avif|heic|heif|svg)$/i,'');out.push({key:indexNorm_(name),id:f.getId(),url:'https://drive.google.com/thumbnail?id='+encodeURIComponent(f.getId())+'&sz=w1600'})}});
   return out.sort((a,b)=>a.key.localeCompare(b.key,undefined,{numeric:true})||a.id.localeCompare(b.id));
 }
 function validateIndexHeaders_(h){
