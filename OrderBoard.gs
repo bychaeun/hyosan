@@ -232,10 +232,11 @@ const ERP_ITEM_SHEET='ERP 품목',ERP_ITEM_DAYS=7,ERP_NOTE_FORMAT='2';
 const ERP_ITEM_HEADERS=['종이넘버','품목코드','제품명','샘플북','스펙아웃','비고','등록일','최근 판매일'];
 function erpItemsDue_(){return Date.now()-Number(PropertiesService.getScriptProperties().getProperty('ERP_ITEMS_AT')||0)>ERP_ITEM_DAYS*864e5}
 function erpText_(v){return String(v==null?'':v).replace(/[\r\n\t]+/g,' ').replace(/\s{2,}/g,' ').trim()}
-// 종이넘버(stockKey_)별 '내용' 줄: 종이 비고 → 스펙아웃 날짜 → 인덱스 비고 → 품목 비고(같은 문구는 제품명을 묶어 한 줄)
+// 종이넘버(stockKey_)별 '내용' 줄: 제품명 목록 → 종이 비고 → 스펙아웃 날짜 → 인덱스 비고 → 품목 비고(같은 문구는 제품명을 묶어 한 줄)
 function erpNoteLines_(items,paperRemarks,index){
   const notes=new Map(),add=(paper,line)=>{const k=stockKey_(paper);if(!k||!line)return;const list=notes.get(k)||[];if(!list.includes(line))list.push(line);notes.set(k,list)};
   const grouped=(rows,keyOf,lineOf)=>{const g=new Map();rows.forEach(r=>{const k=keyOf(r);if(!k)return;const id=stockKey_(r.paper)+'\u0000'+k;const o=g.get(id)||{paper:r.paper,key:k,names:[]};const n=erpText_(r.name);if(n&&!o.names.includes(n))o.names.push(n);g.set(id,o)});g.forEach(o=>add(o.paper,lineOf(o)))};
+  grouped(items||[],()=>'제품명',o=>o.names.length?'제품명: '+o.names.join(', '):'');   // 같은 종이를 쓰는 ERP 제품명을 한 줄로
   (paperRemarks||[]).forEach(p=>{const t=erpText_(p.remark);if(t)add(p.paper,'종이 비고: '+t)});
   grouped(items||[],r=>erpText_(r.specout),o=>'스펙아웃 '+o.key+(o.names.length?': '+o.names.join(', '):''));
   (index||[]).forEach(x=>{const n=erpText_(x.name),d=erpText_(x.specOut),t=erpText_(x.remark);if(d)add(x.paper,'스펙아웃 '+d+(n?' ('+n+')':''));if(t)add(x.paper,(n?n+': ':'')+t)});
