@@ -39,3 +39,8 @@ test('rows pasted with a blank LPM_ID get the next free ID once',()=>{
  const ids=c.planIndexSync_([a,b],[],[]).updates.filter(u=>u.col===1);assert.equal(ids.length,1);assert.equal(ids[0].row,3);assert.equal(ids[0].value,'LPM-121');
  b[0]=ids[0].value;assert.equal(c.planIndexSync_([a,b],[],[]).updates.filter(u=>u.col===1).length,0);
 });
+test('columns are found by header so an inserted 내용2 column does not shift writes',()=>{
+ const head=['LPM_ID','ProductName','PreviousNames','SampleBook','Category','ColorTone','ColorHex','PaperNumber','BasePaperCompany','내용','내용2','ImageURL','Active','인덱스 변경 내용','SpecialNumbers','ManualManaged','SpecOut'];
+ const cols=c.indexColumns_(head);assert.equal(cols[10],11);assert.equal(cols[11],12);assert.equal(cols[12],13);assert.equal(cols[13],15);assert.equal(cols[0],0);
+ assert.throws(()=>c.indexColumns_(head.filter(h=>h!=='ImageURL')),/ImageURL/);
+});

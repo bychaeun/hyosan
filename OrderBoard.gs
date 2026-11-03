@@ -225,27 +225,28 @@ function newPapersPush_(body){
 
 /* ───── ERP 품목·비고: 사무실 PC가 7일마다(상태 응답의 erpItemsDue) HYOSAN_LPM 종이의 ERP 품목과 비고를 보낸다 ─────
    items:[{paper,code,name,book,specout,remark,made,lastSale}] → 'ERP 품목' 시트를 통째로 다시 채운다(직접 고치지 않는 ERP 사본).
-   paperRemarks:[{paper,remark}] · index:[{paper,name,specOut,remark}] + 품목 비고·스펙아웃 → HYOSAN_LPM '내용' 칸의 [ERP] 줄.
-   사람이 쓴 '내용'(‘[ERP]’로 시작하지 않는 줄)은 그대로 둔다. 'SpecOut' 체크 칸이 없으면 맨 끝에 만든다(체크는 사람이 한다). */
-const ERP_ITEM_SHEET='ERP 품목',ERP_NOTE_PREFIX='[ERP] ',ERP_ITEM_DAYS=7;
+   paperRemarks:[{paper,remark}] · index:[{paper,name,specOut,remark}] + 품목 비고·스펙아웃 → HYOSAN_LPM '내용'(관리자만 보는 ERP 칸)을 통째로 다시 쓴다.
+   사람이 쓰는 내용은 '내용2'(모두가 봄). 처음 한 번은 예전 '내용'에서 [ERP] 줄이 아닌 것을 '내용2'로 옮긴다.
+   'SpecOut' 체크 칸이 없으면 맨 끝에 만든다(체크는 사람이 한다). */
+const ERP_ITEM_SHEET='ERP 품목',ERP_ITEM_DAYS=7,ERP_NOTE_FORMAT='2';
 const ERP_ITEM_HEADERS=['종이넘버','품목코드','제품명','샘플북','스펙아웃','비고','등록일','최근 판매일'];
 function erpItemsDue_(){return Date.now()-Number(PropertiesService.getScriptProperties().getProperty('ERP_ITEMS_AT')||0)>ERP_ITEM_DAYS*864e5}
 function erpText_(v){return String(v==null?'':v).replace(/[\r\n\t]+/g,' ').replace(/\s{2,}/g,' ').trim()}
-// 종이넘버(stockKey_)별 [ERP] 줄: 종이 비고 → 품목 스펙아웃 → 인덱스 → 품목 비고(같은 문구는 제품명을 묶어 한 줄)
+// 종이넘버(stockKey_)별 '내용' 줄: 종이 비고 → 스펙아웃 날짜 → 인덱스 비고 → 품목 비고(같은 문구는 제품명을 묶어 한 줄)
 function erpNoteLines_(items,paperRemarks,index){
   const notes=new Map(),add=(paper,line)=>{const k=stockKey_(paper);if(!k||!line)return;const list=notes.get(k)||[];if(!list.includes(line))list.push(line);notes.set(k,list)};
   const grouped=(rows,keyOf,lineOf)=>{const g=new Map();rows.forEach(r=>{const k=keyOf(r);if(!k)return;const id=stockKey_(r.paper)+'\u0000'+k;const o=g.get(id)||{paper:r.paper,key:k,names:[]};const n=erpText_(r.name);if(n&&!o.names.includes(n))o.names.push(n);g.set(id,o)});g.forEach(o=>add(o.paper,lineOf(o)))};
-  (paperRemarks||[]).forEach(p=>{const t=erpText_(p.remark);if(t)add(p.paper,ERP_NOTE_PREFIX+'종이 비고: '+t)});
-  grouped(items||[],r=>erpText_(r.specout),o=>ERP_NOTE_PREFIX+'스펙아웃 '+o.key+(o.names.length?': '+o.names.join(', '):''));
-  (index||[]).forEach(x=>{const n=erpText_(x.name),d=erpText_(x.specOut),t=erpText_(x.remark);if(d)add(x.paper,ERP_NOTE_PREFIX+'인덱스 스펙아웃 '+d+(n?' ('+n+')':''));if(t)add(x.paper,ERP_NOTE_PREFIX+'인덱스 비고'+(n?' ('+n+')':'')+': '+t)});
-  grouped(items||[],r=>erpText_(r.remark),o=>ERP_NOTE_PREFIX+(o.names.length?o.names.join(', ')+': ':'')+o.key);
+  (paperRemarks||[]).forEach(p=>{const t=erpText_(p.remark);if(t)add(p.paper,'종이 비고: '+t)});
+  grouped(items||[],r=>erpText_(r.specout),o=>'스펙아웃 '+o.key+(o.names.length?': '+o.names.join(', '):''));
+  (index||[]).forEach(x=>{const n=erpText_(x.name),d=erpText_(x.specOut),t=erpText_(x.remark);if(d)add(x.paper,'스펙아웃 '+d+(n?' ('+n+')':''));if(t)add(x.paper,(n?n+': ':'')+t)});
+  grouped(items||[],r=>erpText_(r.remark),o=>(o.names.length?o.names.join(', ')+': ':'')+o.key);
   return notes;
 }
-// 기존 '내용'에서 [ERP] 줄만 새것으로 바꾼다
-function mergeErpNote_(old,lines){
-  const keep=String(old==null?'':old).split(/\r?\n/).filter(l=>!l.startsWith(ERP_NOTE_PREFIX.trim()));
-  while(keep.length&&!keep[keep.length-1].trim())keep.pop();
-  return keep.concat(lines||[]).join('\n');
+// 예전 '내용'에서 사람이 쓴 줄([ERP]로 시작하지 않는 줄)만 골라 '내용2' 뒤에 붙인다
+function movedManualNote_(oldNote,oldNote2){
+  const manual=String(oldNote==null?'':oldNote).split(/\r?\n/).filter(l=>!l.startsWith('[ERP]')).join('\n').trim();
+  const kept=String(oldNote2==null?'':oldNote2).trim();
+  return !manual?kept:kept?kept+'\n'+manual:manual;
 }
 function ensureSpecOutColumn_(lpm){
   const width=lpm.getLastColumn(),head=lpm.getRange(1,1,1,width).getDisplayValues()[0];let col=head.indexOf('SpecOut')+1,created=false;
@@ -270,14 +271,23 @@ function erpItemsPush_(body){
     if(sh.getMaxRows()<out.length)sh.insertRowsAfter(sh.getMaxRows(),out.length-sh.getMaxRows());   // 새 시트는 1000행뿐
     sh.getRange(1,1,out.length,ERP_ITEM_HEADERS.length).setNumberFormat('@').setValues(out);
     sh.getRange(1,1,1,ERP_ITEM_HEADERS.length).setFontWeight('bold').setNote('ERP에서 7일마다 자동으로 다시 채워집니다. 여기서 고친 내용은 다음 동기화 때 사라집니다.');
-    // 2) HYOSAN_LPM '내용'의 [ERP] 줄
-    const width=lpm.getLastColumn(),head=lpm.getRange(1,1,1,width).getDisplayValues()[0],pc=head.indexOf('PaperNumber')+1,nc=head.indexOf('내용')+1,last=lpm.getLastRow();
-    let changed=0;
+    // 2) HYOSAN_LPM '내용' = ERP 비고(관리자 전용). 처음 한 번은 사람이 쓴 줄을 '내용2'로 옮긴다.
+    const props=PropertiesService.getScriptProperties();
+    const width=lpm.getLastColumn(),head=lpm.getRange(1,1,1,width).getDisplayValues()[0].map(h=>String(h).trim()),pc=head.indexOf('PaperNumber')+1,nc=head.indexOf('내용')+1,n2c=head.indexOf('내용2')+1,last=lpm.getLastRow();
+    let changed=0,moved=0;
     if(pc&&nc&&last>1){
       const notes=erpNoteLines_(body.items,body.paperRemarks,body.index);
       const papers=lpm.getRange(2,pc,last-1,1).getDisplayValues(),range=lpm.getRange(2,nc,last-1,1),values=range.getValues();
+      if(props.getProperty('ERP_NOTE_FORMAT')!==ERP_NOTE_FORMAT){
+        if(!n2c)throw appError_("HYOSAN_LPM에 '내용2' 칸이 없어 사람이 쓴 내용을 옮길 수 없습니다.",'NOTE2_MISSING');
+        const range2=lpm.getRange(2,n2c,last-1,1),values2=range2.getValues();
+        values.forEach((v,i)=>{const next=movedManualNote_(v[0],values2[i][0]);if(next!==String(values2[i][0]==null?'':values2[i][0]).trim()){values2[i][0]=next;moved++}});
+        if(moved)range2.setValues(values2);
+        SpreadsheetApp.flush();props.setProperty('ERP_NOTE_FORMAT',ERP_NOTE_FORMAT);   // 옮긴 직후 표시: 아래가 실패해 다시 돌아도 두 번 옮기지 않게
+        lpm.getRange(1,nc).setNote("ERP 비고를 7일마다 자동으로 채웁니다(관리자만 봄). 직접 쓰는 내용은 '내용2'에 적어 주세요.");
+      }
       const dirty=[];
-      values.forEach((v,i)=>{const lines=String(papers[i][0]).split(/[\r\n,;|]+/).flatMap(p=>notes.get(stockKey_(p))||[]);const next=mergeErpNote_(v[0],Array.from(new Set(lines)));if(next!==String(v[0]==null?'':v[0])){v[0]=next;dirty.push(i)}});
+      values.forEach((v,i)=>{const lines=String(papers[i][0]).split(/[\r\n,;|]+/).flatMap(p=>notes.get(stockKey_(p))||[]);const next=Array.from(new Set(lines)).join('\n');if(next!==String(v[0]==null?'':v[0])){v[0]=next;dirty.push(i)}});
       changed=dirty.length;
       if(changed){
         // 바뀐 칸만 이어진 묶음으로 쓴다(그 사이 사람이 고친 다른 칸을 덮지 않게). 묶음이 너무 많은 첫 실행만 칸 전체를 한 번에 쓴다.
@@ -286,7 +296,7 @@ function erpItemsPush_(body){
         try{CacheService.getScriptCache().remove(DATA_CACHE_PREFIX+'meta')}catch(e){}   // 웹앱이 다음 요청 때 새 '내용'을 읽게
       }
     }
-    PropertiesService.getScriptProperties().setProperty('ERP_ITEMS_AT',String(Date.now()));
-    return {ok:true,items:rows.length,notesChanged:changed,specOutCreated};
+    props.setProperties({ERP_ITEMS_AT:String(Date.now()),ERP_NOTE_FORMAT});
+    return {ok:true,items:rows.length,notesChanged:changed,movedToNote2:moved,specOutCreated};
   }finally{lock.releaseLock()}
 }

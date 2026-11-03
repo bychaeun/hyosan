@@ -11,7 +11,7 @@ const post=(ctx,body)=>ctx.doPost({postData:{contents:JSON.stringify(body)}});
 
 test('same catalog answers "not modified" without reading sheets',()=>{
  const ctx=server({count:1,hash:'h1'});ctx.getAllData_=()=>assert.fail('catalog must not be read');
- const r=post(ctx,{action:'data',since:'h1'});
+ const r=post(ctx,{action:'data',since:'h1.n'});
  assert.equal(r.notModified,true);assert.equal(r.user.email,'staff');assert.equal(r.lpm,undefined);
 });
 test('changed catalog or forced refresh still sends full data',()=>{

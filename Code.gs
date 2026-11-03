@@ -27,7 +27,7 @@ function doPost(e){
     if(body.action==='orderBoardPush')return jsonOutput(orderBoardPush_(body));     // 사무실 PC 자동 전송 (OrderBoard.gs)
     if(body.action==='orderBoardStatus')return jsonOutput(orderBoardStatus_(body));
     if(body.action==='newPapersPush')return jsonOutput(newPapersPush_(body));     // 7일마다 ERP 신규 종이 → '신규 종이(ERP)' 시트
-    if(body.action==='erpItemsPush')return jsonOutput(erpItemsPush_(body));       // 7일마다 ERP 품목 → 'ERP 품목' 시트 + '내용'의 [ERP] 줄
+    if(body.action==='erpItemsPush')return jsonOutput(erpItemsPush_(body));       // 7일마다 ERP 품목 → 'ERP 품목' 시트 + '내용'(관리자 전용)
     const user=authenticateRequest_(body,cfg),blocked=maintenanceBlock_(user,cfg);
     if(blocked)return jsonOutput(blocked);
     if(body.action==='sessionStatus')return jsonOutput(renewSessionResponse_(body,user,userResponse_(user)));
@@ -36,9 +36,9 @@ function doPost(e){
     const level=userLevel_(user);
     if(body.action==='data'){
       // 휴대폰이 가진 데이터와 같으면 본문 없이 "그대로"만 알려 준다(30분 동기화·앱 재실행 때 수백 KB 절약)
-      const hash=levelHash_(cachedDataHash_(),level);
+      const admin=user.Status==='ADMIN',hash=levelHash_(cachedDataHash_(),level,admin);
       if(body.force!==true&&body.since&&body.since===hash)return jsonOutput(renewSessionResponse_(body,user,{ok:true,notModified:true,dataHash:body.since,user:userResponse_(user).user}));
-      return jsonOutput(renewSessionResponse_(body,user,Object.assign(dataForLevel_(getAllData_(body.force===true),level),{user:userResponse_(user).user})));
+      return jsonOutput(renewSessionResponse_(body,user,Object.assign(dataForLevel_(getAllData_(body.force===true),level,admin),{user:userResponse_(user).user})));
     }
     if(body.action==='orderBoard'){if(level!=='FULL')throw appError_('상위 사용자만 볼 수 있습니다.','LEVEL_REQUIRED');return orderBoardResponse_(body,user)}
     if(body.action==='stock'){if(level!=='FULL')throw appError_('상위 사용자만 볼 수 있습니다.','LEVEL_REQUIRED');return stockResponse_(body,user)}
@@ -163,12 +163,14 @@ function userResponse_(user){
 // APP_USERS의 Level 칸이 비어 있으면(기존 사용자) 상위, BASIC이면 하위. 관리자는 항상 상위.
 const BASIC_HIDDEN_FIELDS=['PaperNumber','PaperNo','BasePaperCompany'];
 function userLevel_(user){return user&&(user.Status==='ADMIN'||String(user.Level||'').trim().toUpperCase()!=='BASIC')?'FULL':'BASIC'}
-function levelHash_(hash,level){return hash?hash+(level==='BASIC'?'.b':''):''}
-// 하위 사용자에게는 종이 넘버·원지 회사명을 아예 보내지 않는다(화면에서 숨기는 것만으로는 개발자 도구로 보임)
-function dataForLevel_(data,level){
-  if(level!=='BASIC')return data;
-  const strip=rows=>(rows||[]).map(r=>{const o=Object.assign({},r);BASIC_HIDDEN_FIELDS.forEach(k=>delete o[k]);return o});
-  return Object.assign({},data,{lpm:strip(data.lpm),specialSpecs:strip(data.specialSpecs),dataHash:levelHash_(data.dataHash,level)});
+function levelHash_(hash,level,admin){return hash?hash+(level==='BASIC'?'.b':'')+(admin?'':'.n'):''}
+// 하위 사용자에게는 종이 넘버·원지 회사명을, 관리자가 아니면 HYOSAN_LPM '내용'(ERP 비고)을 아예 보내지 않는다(화면에서 숨기는 것만으로는 개발자 도구로 보임)
+const ADMIN_ONLY_LPM_FIELDS=['내용'];
+function dataForLevel_(data,level,admin){
+  if(level!=='BASIC'&&admin)return data;
+  const strip=(rows,fields)=>(rows||[]).map(r=>{const o=Object.assign({},r);fields.forEach(k=>delete o[k]);return o});
+  const basic=level==='BASIC'?BASIC_HIDDEN_FIELDS:[];
+  return Object.assign({},data,{lpm:strip(data.lpm,basic.concat(admin?[]:ADMIN_ONLY_LPM_FIELDS)),specialSpecs:basic.length?strip(data.specialSpecs,basic):data.specialSpecs,dataHash:levelHash_(data.dataHash,level,admin)});
 }
 function levelColumn_(sh){
   const width=Math.max(sh.getLastColumn(),USER_HEADERS.length),headers=sh.getRange(1,1,1,width).getDisplayValues()[0].map(v=>String(v).trim()),found=headers.indexOf('Level');

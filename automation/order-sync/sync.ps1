@@ -179,7 +179,7 @@ try {
 
   # ERP 품목·비고(웹앱이 7일마다 erpItemsDue로 알려줌): 시트 종이의 품목(제품명·비고·스펙아웃)과 종이·인덱스 비고 → 'ERP 품목' 시트와 '내용'의 [ERP] 줄
   $erpItemRows = $null
-  if ($paperSet.Count -and ($status.erpItemsDue -or ($DryRun -and $ErpItems))) { try {   # 실패해도 수주현황판·재고 전송은 그대로 진행
+  if ($paperSet.Count -and ($status.erpItemsDue -or $ErpItems)) { try {   # 실패해도 수주현황판·재고 전송은 그대로 진행
     $inSheet = { param($v) $k = PaperKey $v; $k -and $paperSet.ContainsKey($k) }
     $erpItemRows = New-Object System.Collections.ArrayList; $erpPaperRows = New-Object System.Collections.ArrayList; $erpIndexRows = New-Object System.Collections.ArrayList
     Rows ("WITH sale AS (SELECT item_code, MAX(reg_date) AS d FROM dbo.tb_salelist WITH (NOLOCK) WHERE deleted=0 GROUP BY item_code)" +

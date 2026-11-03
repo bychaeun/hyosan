@@ -1,7 +1,7 @@
 // Standalone HYOSAN INDEX SYNC project. Do not add this file to the web API project.
 const SPREADSHEET_ID='1RC-6ibPA86zaWOGt1rzgmQf9tLpT4OcgdI6K9XcUPTI';
 const LPM_SHEET='HYOSAN_LPM',INDEX_FOLDER='1q_c5qhZr8GpOqVf2MK11v9hwlmoHNFuU',ERP_IMAGE_FOLDER='1Wn6eedmpG3dvLx9EtLCCutWZS1WVkx8t',IMAGE_FOLDERS=['17nAS6IOCC5tkl_L0NOYqdltnbRZmyZBb',ERP_IMAGE_FOLDER];
-const SYNC_VERSION='2026-11-02-erp-image-last-v5';
+const SYNC_VERSION='2026-11-03-columns-by-header-v6';
 function syncIndexCode(){return runIndexSync_(false)}
 function previewIndexSync(){return runIndexSync_(true)}
 function installIndexSyncTrigger(){
@@ -19,17 +19,17 @@ function runIndexSync_(dryRun){
     if(!sources.length)throw new Error('유효한 종이넘버가 없습니다. 원본 엑셀의 A:Q 구조를 확인하세요.');
     const images=readIndexImages_(),sheet=SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(LPM_SHEET);
     if(!sheet)throw new Error('대상 시트가 없습니다.');
-    const last=sheet.getLastRow(),values=sheet.getRange(1,1,Math.max(last,1),Math.max(13,sheet.getLastColumn())).getDisplayValues();validateIndexHeaders_(values[0]);
-    const manualColumn=values[0].findIndex(h=>['ManualManaged','수동관리'].includes(String(h).trim()));
-    const formulas=last>1?sheet.getRange(2,1,last-1,13).getFormulas():[],plan=planIndexSync_(values.slice(1),sources,images,manualColumn);
-    plan.updates.forEach(u=>{if(formulas[u.row-2]&&formulas[u.row-2][u.col-1])throw new Error('자동 갱신 대상에 수식이 있습니다: '+u.row+'행 '+u.col+'열')});
+    const last=sheet.getLastRow(),values=sheet.getRange(1,1,Math.max(last,1),sheet.getLastColumn()).getDisplayValues(),cols=indexColumns_(values[0]),width=values[0].length;
+    const formulas=last>1?sheet.getRange(2,1,last-1,width).getFormulas():[],plan=planIndexSync_(values.slice(1).map(r=>cols.map(c=>c>=0?r[c]:'')),sources,images,cols[13]>=0?13:-1);
+    const updates=plan.updates.map(u=>({row:u.row,col:cols[u.col-1]+1,value:u.value}));   // 계획의 1·11·13번 칸 → 실제 시트 칸
+    updates.forEach(u=>{if(formulas[u.row-2]&&formulas[u.row-2][u.col-1])throw new Error('자동 갱신 대상에 수식이 있습니다: '+u.row+'행 '+u.col+'열')});
     if(!dryRun){
-      if(!values[0][12])sheet.getRange(1,13).setValue('인덱스 변경 내용');
-      writeIndexUpdates_(sheet,plan.updates);
+      writeIndexUpdates_(sheet,updates);
       if(plan.additions.length){
         const start=last+1,end=last+plan.additions.length;
         if(end>sheet.getMaxRows())sheet.insertRowsAfter(sheet.getMaxRows(),end-sheet.getMaxRows());
-        sheet.getRange(start,1,plan.additions.length,13).setNumberFormat('@').setValues(plan.additions.map(r=>r.map(literalIndexText_))).setBackground('#D9EAD3');
+        const rows=plan.additions.map(a=>{const r=Array(width).fill('');cols.forEach((c,i)=>{if(c>=0&&i<a.length)r[c]=a[i]});return r.map(literalIndexText_)});
+        sheet.getRange(start,1,rows.length,width).setNumberFormat('@').setValues(rows).setBackground('#D9EAD3');
       }
       SpreadsheetApp.flush();
     }
@@ -40,7 +40,7 @@ function runIndexSync_(dryRun){
 }
 // Batch contiguous changes per column. Existing names, categories and images are not rewritten.
 function writeIndexUpdates_(sheet,updates){
-  [1,11,13].forEach(col=>{
+  Array.from(new Set(updates.map(u=>u.col))).sort((a,b)=>a-b).forEach(col=>{
     const list=updates.filter(u=>u.col===col).sort((a,b)=>a.row-b.row);let start=0,values=[];
     const flush=()=>{if(values.length)sheet.getRange(start,col,values.length,1).setNumberFormat('@').setValues(values).setWrap(true);values=[]};
     list.forEach(u=>{if(values.length&&u.row!==start+values.length)flush();if(!values.length)start=u.row;values.push([literalIndexText_(u.value)])});flush();
@@ -68,10 +68,13 @@ function readIndexImages_(){
     out.push({key:indexNorm_(name),id:f.getId(),crop,url:'https://drive.google.com/thumbnail?id='+encodeURIComponent(f.getId())+'&sz=w1600'+(crop?'&crop=erp':'')})}});
   return out.sort((a,b)=>a.key.localeCompare(b.key,undefined,{numeric:true})||a.id.localeCompare(b.id));
 }
-function validateIndexHeaders_(h){
-  const required={0:'LPM_ID',1:'ProductName',2:'PreviousNames',7:'PaperNumber',8:'BasePaperCompany',10:'ImageURL',11:'Active'};
-  Object.keys(required).forEach(k=>{if(h[k]!==required[k])throw new Error('시트 열 구조가 변경되었습니다: '+required[k])});
-  if(h[12]&&!['인덱스 변경 내용','자동화 상태'].includes(h[12]))throw new Error('M열에 다른 용도의 제목이 있어 중단합니다.');
+// 시트 칸은 제목으로 찾는다('내용2'처럼 칸이 끼어들어도 그대로 동작). 계획(planIndexSync_)은 아래 순서의 예전 13칸(+수동관리)으로 짠다.
+const INDEX_COLUMNS=['LPM_ID','ProductName','PreviousNames','SampleBook','Category','ColorTone','ColorHex','PaperNumber','BasePaperCompany','내용','ImageURL','Active',['인덱스 변경 내용','자동화 상태'],['ManualManaged','수동관리']];
+const INDEX_REQUIRED=[0,1,2,7,8,10,11,12];
+function indexColumns_(head){
+  const h=head.map(v=>String(v).trim()),cols=INDEX_COLUMNS.map(n=>[].concat(n).map(x=>h.indexOf(x)).find(i=>i>=0)??-1);
+  INDEX_REQUIRED.forEach(i=>{if(cols[i]<0)throw new Error('시트에서 칸을 찾지 못했습니다: '+[].concat(INDEX_COLUMNS[i])[0])});
+  return cols;
 }
 function driveImageId_(url){try{const s=String(url);if(!/^https:\/\/(?:drive\.google\.com|drive\.usercontent\.google\.com|lh3\.googleusercontent\.com)\//i.test(s))return '';const m=s.match(/\/(?:file\/d|d)\/([^/?#]+)/)||s.match(/[?&]id=([^&#]+)/);return m?decodeURIComponent(m[1]):''}catch(e){return ''}}
 const isErpImageUrl_=url=>/[?&]crop=erp(?:&|#|$)/.test(String(url));

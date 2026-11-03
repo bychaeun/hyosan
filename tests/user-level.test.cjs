@@ -4,7 +4,7 @@ function server(user,meta={count:1,hash:'h1'}){
  const ctx=vm.createContext({console,JSON,Date,CacheService:{getScriptCache:()=>({get:k=>k.endsWith('meta')?JSON.stringify(meta):null})}});
  vm.runInContext(code,ctx);
  ctx.getConfig_=()=>({});ctx.authenticateRequest_=()=>user;ctx.jsonOutput=o=>o;
- ctx.getAllData_=()=>({lpm:[{LPM_ID:'LPM-1',ProductName:'N246',PaperNumber:'SCS677',BasePaperCompany:'원지사',ColorHex:'#fff'}],specialSpecs:[{SpecialSpec_ID:'S1',PaperNumber:'SCS677'}],patterns:[],emboss:[],sites:[],dataHash:'h1'});
+ ctx.getAllData_=()=>({lpm:[{LPM_ID:'LPM-1',ProductName:'N246',PaperNumber:'SCS677',BasePaperCompany:'원지사',ColorHex:'#fff','내용':'ERP 비고','내용2':'모두 보는 내용'}],specialSpecs:[{SpecialSpec_ID:'S1',PaperNumber:'SCS677'}],patterns:[],emboss:[],sites:[],dataHash:'h1'});
  return ctx;
 }
 const post=(ctx,body)=>JSON.parse(JSON.stringify(ctx.doPost({postData:{contents:JSON.stringify(body)}})));
@@ -19,11 +19,11 @@ test('하위 users never receive paper numbers or paper companies',()=>{
  const r=post(server(basic),{action:'data'});
  assert.equal(r.user.level,'BASIC');assert.equal(r.lpm[0].PaperNumber,undefined);assert.equal(r.lpm[0].BasePaperCompany,undefined);
  assert.equal(r.specialSpecs[0].PaperNumber,undefined);assert.equal(r.lpm[0].ProductName,'N246');assert.equal(r.lpm[0].ColorHex,'#fff','colorist still works');
- assert.equal(r.dataHash,'h1.b','level-specific fingerprint');
+ assert.equal(r.dataHash,'h1.b.n','level-specific fingerprint');
  const full=post(server(legacy),{action:'data'});assert.equal(full.lpm[0].PaperNumber,'SCS677');assert.equal(full.user.level,'FULL');
 });
 test('"not modified" never mixes 상위 and 하위 data',()=>{
- assert.equal(post(server(basic),{action:'data',since:'h1.b'}).notModified,true);
+ assert.equal(post(server(basic),{action:'data',since:'h1.b.n'}).notModified,true);
  assert.equal(post(server(basic),{action:'data',since:'h1'}).notModified,undefined);
  assert.equal(post(server(legacy),{action:'data',since:'h1.b'}).notModified,undefined);
 });
@@ -36,4 +36,11 @@ test('screen hides the order menu, paper rows and the colour row',()=>{
  assert.match(html,/\(canSeePaper\(\)\?`<div class="meta-pair">\$\{info\('종이 넘버'/);
  assert.doesNotMatch(html,/info\('컬러'/,'colour row removed from the LPM popup');
  assert.match(html,/function renderOrders\(force=false\)\{\r?\n if\(!canSeePaper\(\)\)return;/);
+});
+test('only admins receive the ERP 내용 column; everyone gets 내용2',()=>{
+ const full=post(server(legacy),{action:'data'}),basicR=post(server(basic),{action:'data'}),admin=post(server({Email:'ad@x.com',Status:'ADMIN'}),{action:'data'});
+ assert.equal(full.lpm[0]['내용'],undefined);assert.equal(basicR.lpm[0]['내용'],undefined);assert.equal(admin.lpm[0]['내용'],'ERP 비고');
+ [full,basicR,admin].forEach(r=>assert.equal(r.lpm[0]['내용2'],'모두 보는 내용'));
+ assert.equal(full.dataHash,'h1.n');assert.equal(admin.dataHash,'h1');
+ assert.equal(post(server(legacy),{action:'data',since:'h1'}).notModified,undefined,'상위 users never reuse the admin copy');
 });
