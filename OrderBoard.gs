@@ -232,14 +232,23 @@ const ERP_ITEM_SHEET='ERP 품목',ERP_ITEM_DAYS=7;
 const ERP_ITEM_HEADERS=['종이넘버','품목코드','제품명','샘플북','스펙아웃','비고','등록일','최근 판매일'];
 function erpItemsDue_(){return Date.now()-Number(PropertiesService.getScriptProperties().getProperty('ERP_ITEMS_AT')||0)>ERP_ITEM_DAYS*864e5}
 function erpText_(v){return String(v==null?'':v).replace(/[\r\n\t]+/g,' ').replace(/\s{2,}/g,' ').trim()}
-// 종이넘버(stockKey_)별 '내용' 줄: ERP 제품리스트 화면의 스펙아웃·비고 칸만(같은 문구는 제품명을 묶어 한 줄)
+// 종이넘버(stockKey_)별 '내용' 줄: 제품명 목록 → ERP 제품리스트 화면의 스펙아웃·비고 칸(같은 문구는 제품명을 묶어 한 줄)
 function erpNoteLines_(items){
-  const g=new Map(),notes=new Map();
+  const g=new Map(),notes=new Map(),names=new Map();
+  (items||[]).forEach(r=>{const p=stockKey_(r.paper),n=erpText_(r.name);if(!p||!n)return;const l=names.get(p)||[];if(!l.includes(n))l.push(n);names.set(p,l)});
+  names.forEach((l,p)=>notes.set(p,['제품명: '+l.join(', ')]));   // 같은 종이를 쓰는 ERP 제품명(행마다 unlistedNamesLine_로 거른다)
   const group=(keyOf,lineOf)=>{g.clear();(items||[]).forEach(r=>{const k=keyOf(r);if(!k)return;const id=stockKey_(r.paper)+'\u0000'+k;const o=g.get(id)||{paper:r.paper,key:k,names:[]};const n=erpText_(r.name);if(n&&!o.names.includes(n))o.names.push(n);g.set(id,o)});
     g.forEach(o=>{const p=stockKey_(o.paper),line=lineOf(o);if(!p)return;const list=notes.get(p)||[];if(!list.includes(line))list.push(line);notes.set(p,list)})};
   group(r=>erpText_(r.specout),o=>'스펙아웃 '+o.key+(o.names.length?': '+o.names.join(', '):''));
   group(r=>erpText_(r.remark),o=>(o.names.length?o.names.join(', ')+': ':'')+o.key);
   return notes;
+}
+// '제품명:' 줄에서 그 행의 ProductName·PreviousNames·종이넘버와 겹치는 이름만 뺀다(다른 행에 있는 이름·다른 종이넘버는 남김). 다 빠지면 줄도 없앤다.
+function sheetNameKeys_(rows){const keys=new Set();rows.forEach(r=>r.forEach(v=>String(v==null?'':v).split(/[\r\n,;|\/]+/).forEach(n=>{const k=stockKey_(n);if(k)keys.add(k)})));return keys}
+function unlistedNamesLine_(line,known){
+  if(!line.startsWith('제품명: '))return line;
+  const left=line.slice(5).split(', ').filter(n=>{const k=stockKey_(n);return !known.has(k)});
+  return left.length?'제품명: '+left.join(', '):'';
 }
 function ensureSpecOutColumn_(lpm){
   const width=lpm.getLastColumn(),head=lpm.getRange(1,1,1,width).getDisplayValues()[0];let col=head.indexOf('SpecOut')+1,created=false;
@@ -266,13 +275,14 @@ function erpItemsPush_(body){
     sh.getRange(1,1,1,ERP_ITEM_HEADERS.length).setFontWeight('bold').setNote('ERP에서 7일마다 자동으로 다시 채워집니다. 여기서 고친 내용은 다음 동기화 때 사라집니다.');
     // 2) HYOSAN_LPM '내용' = ERP 비고(관리자 전용)
     const props=PropertiesService.getScriptProperties();
-    const width=lpm.getLastColumn(),head=lpm.getRange(1,1,1,width).getDisplayValues()[0].map(h=>String(h).trim()),pc=head.indexOf('PaperNumber')+1,nc=head.indexOf('내용')+1,last=lpm.getLastRow();
+    const width=lpm.getLastColumn(),head=lpm.getRange(1,1,1,width).getDisplayValues()[0].map(h=>String(h).trim()),pc=head.indexOf('PaperNumber')+1,namec=head.indexOf('ProductName')+1,prevc=head.indexOf('PreviousNames')+1,nc=head.indexOf('내용')+1,last=lpm.getLastRow();
     let changed=0;
     if(pc&&nc&&last>1){
       const notes=erpNoteLines_(body.items);
-      const papers=lpm.getRange(2,pc,last-1,1).getDisplayValues(),range=lpm.getRange(2,nc,last-1,1),values=range.getValues();
+      const shown=lpm.getRange(2,1,last-1,Math.max(pc,namec,prevc)).getDisplayValues(),papers=shown.map(r=>r[pc-1]);   // 종이넘버·제품명·이전 이름을 한 번에 읽는다
+      const range=lpm.getRange(2,nc,last-1,1),values=range.getValues();
       const dirty=[];
-      values.forEach((v,i)=>{const lines=String(papers[i][0]).split(/[\r\n,;|]+/).flatMap(p=>notes.get(stockKey_(p))||[]);const next=Array.from(new Set(lines)).join('\n');if(next!==String(v[0]==null?'':v[0])){v[0]=next;dirty.push(i)}});
+      values.forEach((v,i)=>{const own=String(papers[i]).split(/[\r\n,;|]+/),rowKeys=sheetNameKeys_([[own.join('\n'),namec?shown[i][namec-1]:'',prevc?shown[i][prevc-1]:'']]);const lines=own.flatMap(p=>notes.get(stockKey_(p))||[]).map(l=>unlistedNamesLine_(l,rowKeys)).filter(Boolean);const next=Array.from(new Set(lines)).join('\n');if(next!==String(v[0]==null?'':v[0])){v[0]=next;dirty.push(i)}});
       changed=dirty.length;
       if(changed){
         // 바뀐 칸만 이어진 묶음으로 쓴다(그 사이 사람이 고친 다른 칸을 덮지 않게). 묶음이 너무 많은 첫 실행만 칸 전체를 한 번에 쓴다.
