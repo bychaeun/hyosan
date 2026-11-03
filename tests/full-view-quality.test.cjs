@@ -12,3 +12,7 @@ test('full view shows the cached popup image while the 2048px version loads',()=
  assert.match(html,/function showProgressive\(img,src,hold\)\{[^}]*const low=hold\|\|sizedDriveImage\(src,640\)/);
  assert.match(html,/if\(!viewer\.open\)viewer\.showModal\(\);setModalImage\(state\.modalIndex\)/);
 });
+test('checked SpecOut puts a red stamp over the LPM popup image and is searchable',()=>{
+ assert.match(html,/function isSpecOut\(x\)/);assert.match(html,/'fullview-enabled pinch-enabled'\+\(isSpecOut\(x\)\?' specout':''\)/);
+ assert.match(html,/class="specout-stamp"[^>]*>스펙아웃</);assert.match(html,/\.specout-stamp\{[^}]*color:#e0201b/);assert.match(html,/'스펙아웃 specout':''\]/);
+});

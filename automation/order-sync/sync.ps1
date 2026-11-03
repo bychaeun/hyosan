@@ -1,6 +1,6 @@
 ﻿# 수주현황판 자동 전송 — 업체 ERP DB(읽기 전용)에서 원본 수주현황판 조회를 그대로 실행해 효산 웹앱으로 보낸다.
 # 작업 스케줄러가 10분마다 실행. 계정·전송 키는 %APPDATA%\hyosan-board 에 이 PC·이 윈도우 계정 전용으로 암호화 저장.
-param([switch]$DryRun, [string]$OutFile, [string[]]$Papers, [switch]$Force, [switch]$NewPapers, [string]$ScanDir = 'E:\모양지이미지')   # -Papers: 시험 실행 때 재고 조회할 종이 넘버를 직접 지정 · -Force: 다른 PC가 방금 보냈어도 지금 보냄 · -NewPapers: 시험 실행 때 신규 종이도 조회 · -ScanDir: 종이 스캔 사진 폴더(대표 색)
+param([switch]$DryRun, [string]$OutFile, [string[]]$Papers, [switch]$Force, [switch]$NewPapers, [switch]$ErpItems, [string]$ScanDir = 'E:\모양지이미지')   # -Papers: 시험 실행 때 재고 조회할 종이 넘버를 직접 지정 · -Force: 다른 PC가 방금 보냈어도 지금 보냄 · -NewPapers: 시험 실행 때 신규 종이도 조회 · -ScanDir: 종이 스캔 사진 폴더(대표 색)
 $ErrorActionPreference = 'Stop'
 $home_ = Join-Path $env:APPDATA 'hyosan-board'
 $log = Join-Path $home_ 'sync.log'
@@ -176,6 +176,26 @@ try {
     }
     if ($scanColorsDirty) { [IO.File]::WriteAllText($scanColorsFile, ($scanColors | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding($false))) }
   } catch { $paperCands = $null; Log ("신규 종이 조회 실패(다음 실행 때 다시 시도): " + $_.Exception.Message) } }
+
+  # ERP 품목·비고(웹앱이 7일마다 erpItemsDue로 알려줌): 시트 종이의 품목(제품명·비고·스펙아웃)과 종이·인덱스 비고 → 'ERP 품목' 시트와 '내용'의 [ERP] 줄
+  $erpItemRows = $null
+  if ($paperSet.Count -and ($status.erpItemsDue -or ($DryRun -and $ErpItems))) { try {   # 실패해도 수주현황판·재고 전송은 그대로 진행
+    $inSheet = { param($v) $k = PaperKey $v; $k -and $paperSet.ContainsKey($k) }
+    $erpItemRows = New-Object System.Collections.ArrayList; $erpPaperRows = New-Object System.Collections.ArrayList; $erpIndexRows = New-Object System.Collections.ArrayList
+    Rows ("WITH sale AS (SELECT item_code, MAX(reg_date) AS d FROM dbo.tb_salelist WITH (NOLOCK) WHERE deleted=0 GROUP BY item_code)" +
+      " SELECT p.pattern, i.item_code, ISNULL(i.item,'') AS item, ISNULL(i.smplbook_id,'') AS book, ISNULL(i.specout,'') AS specout, ISNULL(i.remark,'') AS remark," +
+      " ISNULL(CONVERT(char(10),i.first_time,120),'') AS made, ISNULL(CONVERT(char(10),s.d,120),'') AS last_sale" +
+      " FROM dbo.tb_item i WITH (NOLOCK) JOIN dbo.tb_pattern p WITH (NOLOCK) ON p.pattern_code=i.pattern_code AND ISNULL(p.deleted,0)=0 LEFT JOIN sale s ON s.item_code=i.item_code WHERE ISNULL(i.deleted,0)=0") | ForEach-Object {
+      if (& $inSheet $_.pattern) { [void]$erpItemRows.Add([ordered]@{ paper = ([string]$_.pattern).Trim(); code = ([string]$_.item_code).Trim(); name = ([string]$_.item).Trim(); book = ([string]$_.book).Trim(); specout = ([string]$_.specout).Trim(); remark = [string]$_.remark; made = $_.made; lastSale = $_.last_sale }) }
+    }
+    Rows "SELECT pattern, LTRIM(RTRIM(ISNULL(remark,'')+' '+ISNULL(remark2,''))) AS remark FROM dbo.tb_pattern WITH (NOLOCK) WHERE ISNULL(deleted,0)=0 AND LTRIM(RTRIM(ISNULL(remark,'')+ISNULL(remark2,'')))<>''" | ForEach-Object {
+      if (& $inSheet $_.pattern) { [void]$erpPaperRows.Add([ordered]@{ paper = ([string]$_.pattern).Trim(); remark = [string]$_.remark }) }
+    }
+    Rows ("SELECT p.pattern, ISNULL(x.ptn_name,'') AS name, ISNULL(CONVERT(char(10),x.spec_out,120),'') AS spec_out, ISNULL(x.remark,'') AS remark FROM dbo.tb_indexlist x WITH (NOLOCK)" +
+      " JOIN dbo.tb_item i WITH (NOLOCK) ON i.item_code=x.item_code JOIN dbo.tb_pattern p WITH (NOLOCK) ON p.pattern_code=i.pattern_code WHERE ISNULL(x.deleted,0)=0 AND (x.spec_out IS NOT NULL OR ISNULL(x.remark,'')<>'')") | ForEach-Object {
+      if (& $inSheet $_.pattern) { [void]$erpIndexRows.Add([ordered]@{ paper = ([string]$_.pattern).Trim(); name = ([string]$_.name).Trim(); specOut = $_.spec_out; remark = [string]$_.remark }) }
+    }
+  } catch { $erpItemRows = $null; Log ("ERP 품목 조회 실패(다음 실행 때 다시 시도): " + $_.Exception.Message) } }
   $cn.Close()
 
   $generatedAt = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss') + '+09:00'
@@ -185,7 +205,8 @@ try {
 
   if ($DryRun) {
     $target = if ($OutFile) { $OutFile } else { Join-Path $home_ 'board-preview.json' }
-    [IO.File]::WriteAllText($target, (([ordered]@{ generatedAt = $generatedAt; board = $board; stock = $stock; newPapers = $paperCands }) | ConvertTo-Json -Depth 7 -Compress), (New-Object Text.UTF8Encoding($false)))
+    if ($erpItemRows -ne $null) { $summary += " · ERP 품목 $($erpItemRows.Count) · 종이 비고 $($erpPaperRows.Count) · 인덱스 $($erpIndexRows.Count)" }
+    [IO.File]::WriteAllText($target, (([ordered]@{ generatedAt = $generatedAt; board = $board; stock = $stock; newPapers = $paperCands; erpItems = $erpItemRows; erpPaperRemarks = $erpPaperRows; erpIndex = $erpIndexRows }) | ConvertTo-Json -Depth 7 -Compress), (New-Object Text.UTF8Encoding($false)))
     if ($paperCands -ne $null) { $summary += " · 신규 종이 후보 $($paperCands.Count)" }
     Log "시험 실행 완료(전송 안 함): $summary -> $target"
     exit 0
@@ -202,6 +223,13 @@ try {
       if ($np.ok -ne $true) { throw $np.error }
       Log "신규 종이: 후보 $($np.received) · 시트에 추가 $($np.added) · 이미 옮겨져 지움 $($np.removed)"
     } catch { Log ("신규 종이 전송 실패(다음 실행 때 다시 시도): " + $_.Exception.Message) }
+  }
+  if ($erpItemRows -ne $null) {
+    try {
+      $ei = Api ([ordered]@{ action = 'erpItemsPush'; secret = $pushKey; items = @($erpItemRows); paperRemarks = @($erpPaperRows); index = @($erpIndexRows) })
+      if ($ei.ok -ne $true) { throw $ei.error }
+      Log ("ERP 품목: $($ei.items)개 · '내용' 바뀐 종이 $($ei.notesChanged)" + $(if ($ei.specOutCreated) { ' · SpecOut 칸 새로 만듦' } else { '' }))
+    } catch { Log ("ERP 품목 전송 실패(다음 실행 때 다시 시도): " + $_.Exception.Message) }
   }
 } catch {
   Log ("실패: " + $_.Exception.Message)
