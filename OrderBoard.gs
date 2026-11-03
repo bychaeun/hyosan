@@ -249,7 +249,7 @@ function mergeErpNote_(old,lines){
 }
 function ensureSpecOutColumn_(lpm){
   const width=lpm.getLastColumn(),head=lpm.getRange(1,1,1,width).getDisplayValues()[0];let col=head.indexOf('SpecOut')+1,created=false;
-  if(!col){col=width+1;lpm.getRange(1,width).copyTo(lpm.getRange(1,col));lpm.getRange(1,col).setValue('SpecOut');lpm.setColumnWidth(col,80);created=true}
+  if(!col){col=width+1;if(lpm.getMaxColumns()<col)lpm.insertColumnAfter(lpm.getMaxColumns());lpm.getRange(1,width).copyTo(lpm.getRange(1,col));lpm.getRange(1,col).setValue('SpecOut');lpm.setColumnWidth(col,80);created=true}
   const last=lpm.getLastRow();if(last>1)lpm.getRange(2,col,last-1,1).insertCheckboxes();   // 새로 붙은 행에도 체크 칸
   return created;
 }
@@ -267,6 +267,7 @@ function erpItemsPush_(body){
       .sort((a,b)=>a[0].localeCompare(b[0])||b[7].localeCompare(a[7])||a[2].localeCompare(b[2]));
     sh.clearContents();
     const out=[ERP_ITEM_HEADERS].concat(rows);
+    if(sh.getMaxRows()<out.length)sh.insertRowsAfter(sh.getMaxRows(),out.length-sh.getMaxRows());   // 새 시트는 1000행뿐
     sh.getRange(1,1,out.length,ERP_ITEM_HEADERS.length).setNumberFormat('@').setValues(out);
     sh.getRange(1,1,1,ERP_ITEM_HEADERS.length).setFontWeight('bold').setNote('ERP에서 7일마다 자동으로 다시 채워집니다. 여기서 고친 내용은 다음 동기화 때 사라집니다.');
     // 2) HYOSAN_LPM '내용'의 [ERP] 줄
