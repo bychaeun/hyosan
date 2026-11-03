@@ -6,9 +6,10 @@ test('ERP notes group items sharing a remark and keep paper, spec-out and index 
  assert.deepEqual(Array.from(notes),['제품명: HS8139, HS9131, 16762SE, X','종이 비고: 전량사용후 스펙아웃예정','스펙아웃 2025-05-30: 16762SE','스펙아웃 2023-12-31 (조색인쇄지)','조색인쇄지: 실린더폐기','WALNUT & OTHERS','HS8139, HS9131: 종이소진후 스펙아웃']);
  assert(!Array.from(notes).some(l=>/\[ERP\]|인덱스 비고/.test(l)));
 });
-test('one-time move keeps hand-written 내용 lines in 내용2 and drops old [ERP] lines',()=>{
- assert.equal(c.movedManualNote_('직접 쓴 메모\n[ERP] 예전 비고',''),'직접 쓴 메모');
- assert.equal(c.movedManualNote_(2024,'기존 내용2'),'기존 내용2\n2024');
- assert.equal(c.movedManualNote_('[ERP] a\n[ERP] b','유지'),'유지');
- assert.equal(c.movedManualNote_('',''),'');
+test('product-name line keeps only names missing from ProductName/PreviousNames',()=>{
+ const known=c.sheetNameKeys_([['HS8139'],['hs 9131, OLD1\nOLD2']]);
+ assert.equal(c.unlistedNamesLine_('제품명: HS8139, HS9131, 16762SE, old2',known),'제품명: 16762SE');
+ assert.equal(c.unlistedNamesLine_('제품명: HS8139',known),'');
+ assert.equal(c.unlistedNamesLine_('HS8139: 비고',known),'HS8139: 비고');
+ assert.equal(c.unlistedNamesLine_('제품명: SM8025I, sm8025j, W06ME',known,c.sheetNameKeys_([['SM8025I']])),'제품명: sm8025j, W06ME');   // 자기 종이넘버만 빼고 다른 종이넘버는 남김
 });
