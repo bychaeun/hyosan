@@ -44,3 +44,6 @@ test('5-minute warm-up rebuilds the catalog cache by day and rests at night',()=
  assert.deepEqual(run(23),['night',null]);
  assert.deepEqual(run(5),['night',null]);
 });
+test('every cache ungzip names the gzip content type (Apps Script rejects a typeless blob, which silently disabled the catalog cache)',()=>{
+ for(const f of ['Code.gs','OrderBoard.gs']){const src=fs.readFileSync(path.join(__dirname,'..',f),'utf8');const calls=src.match(/Utilities\.ungzip\(Utilities\.newBlob\([^;]*?\)\)/g)||[];assert(calls.length);calls.forEach(c=>assert.match(c,/'application\/x-gzip'/,f+': '+c))}
+});

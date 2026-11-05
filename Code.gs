@@ -8,7 +8,13 @@ function doGet(e){
     const action=(e&&e.parameter&&e.parameter.action)||'data',cfg=getConfig_();
     if(action==='appConfig')return jsonOutput({ok:true,clientId:cfg.GOOGLE_CLIENT_ID||'',authRequired:true,appName:cfg.LIBRARY_TITLE||'HYOSAN LPM Library'});
     if(action==='health')return jsonOutput({ok:true,authRequired:true});
-    if(action==='data')return jsonOutput({ok:false,error:'Google login required',code:'AUTH_REQUIRED'});
+    if(action==='data'){   // 로그인 없이 접속한 손님: 제품명 있는 효산 LPM의 사진·제품명·이전 제품명만
+      if(String(cfg.GUEST_ACCESS==null?'TRUE':cfg.GUEST_ACCESS).trim().toUpperCase()==='FALSE')return jsonOutput({ok:false,error:'Google login required',code:'AUTH_REQUIRED'});   // CONFIG GUEST_ACCESS=FALSE면 손님 보기 끔
+      const blocked=maintenanceBlock_({Status:'GUEST'},cfg);if(blocked)return jsonOutput(blocked);
+      const since=String((e.parameter&&e.parameter.since)||''),hash=cachedDataHash_();
+      if(since&&hash&&since===hash+'.g')return jsonOutput({ok:true,notModified:true,dataHash:since});
+      return jsonOutput(guestResponse_(hash));
+    }
     return jsonOutput({ok:false,error:'Unknown action'});
   }catch(err){return jsonOutput({ok:false,error:String(err),code:err&&err.code?err.code:'REQUEST_FAILED'})}
 }
@@ -172,6 +178,25 @@ function dataForLevel_(data,level,admin){
   const basic=level==='BASIC'?BASIC_HIDDEN_FIELDS:[];
   return Object.assign({},data,{lpm:strip(data.lpm,basic.concat(admin?[]:ADMIN_ONLY_LPM_FIELDS)),specialSpecs:basic.length?strip(data.specialSpecs,basic):data.specialSpecs,dataHash:levelHash_(data.dataHash,level,admin)});
 }
+// 손님(로그인 안 함)에게 보내는 것: 제품명이 적힌 효산 LPM만, 사진·제품명·이전 제품명 + 탭(샘플북·분류)·컬러리스트(색상)용 값.
+// 종이 넘버·원지 회사명·내용·재고·스펙아웃 등은 아예 보내지 않는다. 패턴·경면판·현장도 비운다.
+const GUEST_LPM_FIELDS=['LPM_ID','ProductName','PreviousNames','SampleBook','Category','ColorHex','ImageURL','Active'];
+const GUEST_CONFIG_KEYS=['LIBRARY_TITLE','SYNC_INTERVAL_SECONDS','COLOR_TOLERANCE_PERCENT','VERSION'];
+function guestData_(data){
+  const lpm=(data.lpm||[]).filter(r=>String(r.ProductName||'').trim()&&String(r.Active||'').trim().toUpperCase()!=='FALSE').map(r=>{const o={};GUEST_LPM_FIELDS.forEach(k=>{if(r[k]!=null&&r[k]!=='')o[k]=r[k]});return o});
+  const config={};GUEST_CONFIG_KEYS.forEach(k=>{if(data.config&&data.config[k]!=null)config[k]=data.config[k]});
+  const ids=new Set(lpm.flatMap(r=>String(r.ImageURL||'').match(/[-\w]{25,}/g)||[])),versions={};
+  Object.keys(data.imageVersions||{}).forEach(id=>{if(ids.has(id))versions[id]=data.imageVersions[id]});   // 손님 목록 사진의 버전만(다른 사진 주소는 알리지 않음)
+  return {ok:true,guest:true,patterns:[],lpm:lpm,specialSpecs:[],emboss:[],sites:[],config:config,imageVersions:versions,dataHash:data.dataHash?data.dataHash+'.g':''};
+}
+// 손님 데이터는 작게(압축) 따로 캐시: 손님이 열 때마다 전체 카탈로그(수 MB)를 풀지 않는다
+function guestResponse_(hash){
+  const cache=CacheService.getScriptCache(),key=hash?'guest-data-'+hash:'';
+  if(key){try{const hit=cache.get(key);if(hit)return JSON.parse(Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(hit),'application/x-gzip')).getDataAsString('UTF-8'))}catch(e){}}
+  const out=guestData_(getAllData_(false));
+  if(key&&out.dataHash===hash+'.g'){try{const z=Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(out),'application/json')).getBytes());if(z.length<100000)cache.put(key,z,3600)}catch(e){}}
+  return out;
+}
 function levelColumn_(sh){
   const width=Math.max(sh.getLastColumn(),USER_HEADERS.length),headers=sh.getRange(1,1,1,width).getDisplayValues()[0].map(v=>String(v).trim()),found=headers.indexOf('Level');
   if(found>=0)return found+1;
@@ -242,7 +267,7 @@ function readDataCache_(cache){
   try{
     const meta=JSON.parse(cache.get(DATA_CACHE_PREFIX+'meta')||'null');if(!meta||!meta.count)return null;
     const keys=Array.from({length:meta.count},(_,i)=>DATA_CACHE_PREFIX+i),parts=cache.getAll(keys);if(keys.some(k=>!parts[k]))return null;
-    const bytes=Utilities.base64Decode(keys.map(k=>parts[k]).join('')),json=Utilities.ungzip(Utilities.newBlob(bytes)).getDataAsString();
+    const bytes=Utilities.base64Decode(keys.map(k=>parts[k]).join('')),json=Utilities.ungzip(Utilities.newBlob(bytes,'application/x-gzip')).getDataAsString('UTF-8');   // 콘텐츠 유형이 없으면 ungzip이 실패해 캐시를 못 쓰고 매번 시트를 다시 읽었다
     return JSON.parse(json);
   }catch(e){return null}
 }
