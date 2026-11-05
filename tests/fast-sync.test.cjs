@@ -37,3 +37,10 @@ test('phone keeps its catalog when the server says nothing changed',async()=>{
  await c.syncData();
  assert.equal(JSON.stringify(sent),'{"since":"h1"}');assert.equal(rebuilt,0);assert.equal(status,'ok');assert.equal(c.auth.user.email,'staff');
 });
+test('5-minute warm-up rebuilds the catalog cache by day and rests at night',()=>{
+ const run=hour=>{const ctx=vm.createContext({console,JSON,Date,Utilities:{formatDate:()=>String(hour)},CacheService:{getScriptCache:()=>({get:()=>null})}});
+  vm.runInContext(code,ctx);let forced=null;ctx.getAllData_=f=>{forced=f};return [ctx.warmDataCache(),forced]};
+ assert.deepEqual(run(10),['rebuilt',true]);
+ assert.deepEqual(run(23),['night',null]);
+ assert.deepEqual(run(5),['night',null]);
+});

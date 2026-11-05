@@ -229,6 +229,14 @@ function assertAdmin_(user){if(!user||user.Status!=='ADMIN')throw appError_('관
 function appError_(message,code){const err=new Error(message);err.code=code;return err}
 
 const DATA_CACHE_PREFIX='library-data-v17-';
+// 5분 시간 트리거용: 사용자가 기다리지 않게 서버가 미리 시트를 새로 읽어 캐시를 채워 둔다.
+// 시트를 직접 고친 내용(행 추가·샘플북 카테고리 등)도 5분 안에 반영. 내용이 같으면 해시도 같아 휴대폰은 "그대로" 응답만 받는다.
+// 밤(22~6시)에는 쉬어서 트리거 실행 시간 한도를 아낀다(그동안은 기존처럼 1시간 캐시).
+function warmDataCache(){
+  const h=Number(Utilities.formatDate(new Date(),'Asia/Seoul','H'));
+  if(h>=22||h<6)return 'night';
+  getAllData_(true);return 'rebuilt';
+}
 function cachedDataHash_(){try{return (JSON.parse(scriptCacheGet_(CacheService.getScriptCache(),DATA_CACHE_PREFIX+'meta')||'null')||{}).hash||''}catch(e){return ''}}
 function readDataCache_(cache){
   try{
